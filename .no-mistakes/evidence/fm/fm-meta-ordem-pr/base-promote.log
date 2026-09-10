@@ -1,0 +1,2 @@
+# all fm-task-delivery tests passed
+not ok - promotion disarmed the armed merge poll, so the merge would go unnoticed

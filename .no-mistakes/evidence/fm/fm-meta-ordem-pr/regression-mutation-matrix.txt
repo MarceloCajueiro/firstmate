@@ -1,0 +1,28 @@
+# Regression mutation matrix - each new test fails before its fix, passes after
+
+Trees: the three suites' test files from the target commit, run unchanged against
+three different bin/ trees. $ROOT resolves from the script location, so each run
+exercises that tree's production code.
+
+  527aa7c  base, before any fix
+  3d4e8a3  first commit: relaunch field reorder + decisions_reviewed/decision_keys allowlist
+  bd2ff9c  target: allowlist extended to traceparent/kind/mode/yolo
+
+new regression test                                        527aa7c    3d4e8a3    bd2ff9c   
+---------------------------------------------------------- -------    -------    -------   
+relaunch keeps armed merge poll authenticated (rl43)       FAIL       PASS       PASS      
+trace-on relaunch keeps poll authenticated (rl44)          FAIL       FAIL       PASS      
+captain-hold attestation keeps poll authenticated          FAIL       PASS       PASS      
+promoting an armed scout keeps poll authenticated          FAIL       FAIL       PASS      
+
+Every case fails at its POST-writer assertion on 527aa7c, never at the
+'or this case proves nothing' pre-writer check - so each is a real reproduction,
+not a fixture that never armed the poll. Base failure messages:
+  527aa7c rl43: not ok - the armed merge poll stopped authenticating after relaunch, so the merge would go unnoticed
+  527aa7c rl44: not ok - the republished trace carrier disarmed the armed merge poll, so the merge would go unnoticed
+  527aa7c hold: not ok - the completion attestation disarmed the armed merge poll, so the merge would go unnoticed
+  527aa7c promote: not ok - promotion disarmed the armed merge poll, so the merge would go unnoticed
+
+The 3d4e8a3 column is the independent mutation proof the two fixes were asked to
+keep: reverting the parser allowlist added in bd2ff9c re-breaks exactly rl44 and
+promotion, while the relaunch reorder alone still covers rl43 and captain-hold.

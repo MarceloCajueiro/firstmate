@@ -1,0 +1,1 @@
+not ok - the armed merge poll stopped authenticating after relaunch, so the merge would go unnoticed

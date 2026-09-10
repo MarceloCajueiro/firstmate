@@ -1,0 +1,167 @@
+# Persisted task records after each writer, and the watcher's own gate verdict
+
+The watcher (bin/fm-watch.sh:1997) runs a task's PR merge poll only while
+fm_pr_poll_artifacts_valid accepts the task record. A refused record is what it
+reports as 'check: rejected unauthenticated state checks' - the merge then goes
+unnoticed. Each section below shows the record a writer actually persists, then
+that same gate's verdict, on the base commit and on the fixed commit.
+
+Paths are per-run temp fixtures; the field ORDER of each record is the point.
+
+================================================================
+
+### writer: relaunch (control_relaunch_tx)
+### tree: BASE 527aa7c
+--- persisted task record (<tmp>/fm-control-relaunch.sAk11l/pr-poll-auth-18938/home/state/rl43.meta) ---
+window=fmses:fm-rl43
+endpoint_task_id=rl43
+worktree=<tmp>/fm-control-relaunch.sAk11l/pr-poll-auth-18938/wt
+project=<tmp>/fm-control-relaunch.sAk11l/pr-poll-auth-18938/proj
+harness=claude
+kind=ship
+mode=no-mistakes
+yolo=off
+tasktmp=/tmp/fm-rl43
+model=default
+effort=default
+busy_gen=g1789076402.23688.21606
+spawn_gen=s1789076402.23385.9994
+pr=https://github.com/example/repo/pull/20
+control_relaunch_tx=23143.20260910T214001Z.30192
+--- watcher gate: fm_pr_poll_artifacts_valid ---
+VERDICT: REFUSED (returns 1) -> merge poll disarmed; watcher would report an unauthenticated state check
+not ok - the armed merge poll stopped authenticating after relaunch, so the merge would go unnoticed
+
+### writer: relaunch (control_relaunch_tx)
+### tree: FIXED bd2ff9c
+--- persisted task record (<tmp>/fm-control-relaunch.zNs1tP/pr-poll-auth-7365/home/state/rl43.meta) ---
+window=fmses:fm-rl43
+endpoint_task_id=rl43
+worktree=<tmp>/fm-control-relaunch.zNs1tP/pr-poll-auth-7365/wt
+project=<tmp>/fm-control-relaunch.zNs1tP/pr-poll-auth-7365/proj
+harness=claude
+kind=ship
+mode=no-mistakes
+yolo=off
+tasktmp=/tmp/fm-rl43
+model=default
+effort=default
+busy_gen=g1789076407.25470.22497
+spawn_gen=s1789076407.25140.18767
+control_relaunch_tx=24896.20260910T214006Z.9460
+pr=https://github.com/example/repo/pull/20
+--- watcher gate: fm_pr_poll_artifacts_valid ---
+VERDICT: ACCEPTED (returns 0) -> merge poll stays armed
+ok - fm-control relaunch: the armed merge poll still authenticates after the record is rewritten
+
+================================================================
+
+### writer: relaunch with trace context (traceparent)
+### tree: BASE 527aa7c
+--- persisted task record (<tmp>/fm-control-relaunch.RUvFNS/pr-poll-trace-131/home/state/rl44.meta) ---
+window=fmses:fm-rl44
+endpoint_task_id=rl44
+worktree=<tmp>/fm-control-relaunch.RUvFNS/pr-poll-trace-131/wt
+project=<tmp>/fm-control-relaunch.RUvFNS/pr-poll-trace-131/proj
+harness=claude
+kind=ship
+mode=no-mistakes
+yolo=off
+tasktmp=/tmp/fm-rl44
+model=default
+effort=default
+busy_gen=g1789076339.7454.26200
+spawn_gen=s1789076339.7100.12870
+pr=https://github.com/example/repo/pull/44
+control_relaunch_tx=6867.20260910T213858Z.11946
+traceparent=00-2780852efd89f7e249877b76fc05bd72-2e705aef6c720236-01
+--- watcher gate: fm_pr_poll_artifacts_valid ---
+VERDICT: REFUSED (returns 1) -> merge poll disarmed; watcher would report an unauthenticated state check
+not ok - the republished trace carrier disarmed the armed merge poll, so the merge would go unnoticed
+
+### writer: relaunch with trace context (traceparent)
+### tree: FIXED bd2ff9c
+--- persisted task record (<tmp>/fm-control-relaunch.3AnVTU/pr-poll-trace-3135/home/state/rl44.meta) ---
+window=fmses:fm-rl44
+endpoint_task_id=rl44
+worktree=<tmp>/fm-control-relaunch.3AnVTU/pr-poll-trace-3135/wt
+project=<tmp>/fm-control-relaunch.3AnVTU/pr-poll-trace-3135/proj
+harness=claude
+kind=ship
+mode=no-mistakes
+yolo=off
+tasktmp=/tmp/fm-rl44
+model=default
+effort=default
+busy_gen=g1789076357.14679.28171
+spawn_gen=s1789076357.14301.10101
+control_relaunch_tx=14069.20260910T213916Z.19422
+pr=https://github.com/example/repo/pull/44
+traceparent=00-669a02db3d2aadc46d1b7beffe3e741e-b35230d156e3e515-01
+--- watcher gate: fm_pr_poll_artifacts_valid ---
+VERDICT: ACCEPTED (returns 0) -> merge poll stays armed
+ok - fm-control relaunch: a republished trace carrier leaves the armed merge poll authenticated
+
+================================================================
+
+### writer: captain-hold completion attestation
+### tree: BASE 527aa7c
+--- persisted task record (<tmp>/fm-captain-hold.NzTP77/completion-pr-poll/state/sample-pr-review.meta) ---
+window=firstmate:fm-sample-pr-review
+worktree=<tmp>/fm-captain-hold.NzTP77/completion-pr-poll/projects/missing-sample-pr-review
+project=<tmp>/fm-captain-hold.NzTP77/completion-pr-poll/projects/sample
+harness=codex
+kind=scout
+mode=scout
+spawn_gen=fixture-sample-pr-review
+pr=https://github.com/example/repo/pull/21
+decisions_reviewed=1
+decision_keys=
+--- watcher gate: fm_pr_poll_artifacts_valid ---
+VERDICT: REFUSED (returns 1) -> merge poll disarmed; watcher would report an unauthenticated state check
+not ok - the completion attestation disarmed the armed merge poll, so the merge would go unnoticed
+
+### writer: captain-hold completion attestation
+### tree: FIXED bd2ff9c
+--- persisted task record (<tmp>/fm-captain-hold.uqR1fz/completion-pr-poll/state/sample-pr-review.meta) ---
+window=firstmate:fm-sample-pr-review
+worktree=<tmp>/fm-captain-hold.uqR1fz/completion-pr-poll/projects/missing-sample-pr-review
+project=<tmp>/fm-captain-hold.uqR1fz/completion-pr-poll/projects/sample
+harness=codex
+kind=scout
+mode=scout
+spawn_gen=fixture-sample-pr-review
+pr=https://github.com/example/repo/pull/21
+decisions_reviewed=1
+decision_keys=
+--- watcher gate: fm_pr_poll_artifacts_valid ---
+VERDICT: ACCEPTED (returns 0) -> merge poll stays armed
+ok - captain-hold completion: the attestation leaves an armed merge poll authenticated
+
+================================================================
+
+### writer: scout-to-ship promotion (kind/mode/yolo)
+### tree: BASE 527aa7c
+--- persisted task record (<tmp>/fm-task-delivery.XLXr41/promote-pr-poll/home/state/promote-d2.meta) ---
+window=fm-promote-d2
+worktree=/tmp/wt
+pr=https://github.com/example/repo/pull/22
+kind=ship
+mode=direct-PR
+yolo=on
+--- watcher gate: fm_pr_poll_artifacts_valid ---
+VERDICT: REFUSED (returns 1) -> merge poll disarmed; watcher would report an unauthenticated state check
+not ok - promotion disarmed the armed merge poll, so the merge would go unnoticed
+
+### writer: scout-to-ship promotion (kind/mode/yolo)
+### tree: FIXED bd2ff9c
+--- persisted task record (<tmp>/fm-task-delivery.teZHLm/promote-pr-poll/home/state/promote-d2.meta) ---
+window=fm-promote-d2
+worktree=/tmp/wt
+pr=https://github.com/example/repo/pull/22
+kind=ship
+mode=direct-PR
+yolo=on
+--- watcher gate: fm_pr_poll_artifacts_valid ---
+VERDICT: ACCEPTED (returns 0) -> merge poll stays armed
+ok - fm-promote: promoting an armed scout leaves its merge poll authenticated
