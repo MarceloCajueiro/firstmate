@@ -324,6 +324,61 @@ test_home_seed_returns_treehouse_acquired_home_on_assignment_failure() {
   pass "home seeding returns rejected acquired homes through treehouse"
 }
 
+test_home_seed_clears_orphan_marker_from_returned_treehouse_home() {
+  local home acquired fakebin log first_err second_err marker_after_return second_status=0
+  home="$TMP_ROOT/dash-reuse-home"
+  acquired="$TMP_ROOT/dash-reuse-acquired-home"
+  first_err="$TMP_ROOT/dash-reuse-first.err"
+  second_err="$TMP_ROOT/dash-reuse-second.err"
+  mkdir -p "$home/projects" "$home/data" "$home/state"
+  fm_git_init_commit "$home/projects/alpha"
+  fm_git_add_origin "$home/projects/alpha" "$TMP_ROOT/remotes/dash-reuse-alpha.git"
+  printf '%s\n' '- alpha [direct-PR] - alpha project (added 2026-06-22)' > "$home/data/projects.md"
+  git clone --quiet "$ROOT" "$acquired"
+  # The pool slice of a closed secondmate keeps its ignored content: the identity
+  # marker, data/ records, and cloned projects/ the treehouse return leaves behind.
+  mkdir -p "$acquired/data/retired" "$acquired/state" "$acquired/config"
+  printf 'retired\n' > "$acquired/.fm-secondmate-home"
+  printf '%s\n' '- alpha [direct-PR] - alpha project (added 2026-06-22)' > "$acquired/data/projects.md"
+  printf 'retired scope\n' > "$acquired/data/charter.md"
+  mkdir -p "$acquired/projects"
+  git clone --quiet "file://$(cd "$TMP_ROOT/remotes/dash-reuse-alpha.git" && pwd)" \
+    "$acquired/projects/alpha"
+  fakebin=$(make_fake_tmux "$TMP_ROOT/dash-reuse-fake")
+  log="$TMP_ROOT/dash-reuse-fake/tmux.log"
+
+  if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TREEHOUSE_HOME="$acquired" \
+    FM_FAKE_TREEHOUSE_KEEP_HOME=1 FM_FAKE_TMUX_LOG="$log" \
+    FM_SECONDMATE_CHARTER='replacement scope' FM_SECONDMATE_SCOPE='replacement scope' \
+    "$ROOT/bin/fm-home-seed.sh" replacement - alpha >/dev/null 2>"$first_err"; then
+    fail "seed reused a returned pool slice while its retired marker was still present"
+  fi
+  grep -F 'already marked for retired' "$first_err" >/dev/null \
+    || fail "first seed did not reproduce the orphan-marker refusal"
+  marker_after_return=
+  if [ -f "$acquired/.fm-secondmate-home" ]; then
+    marker_after_return=$(cat "$acquired/.fm-secondmate-home")
+  fi
+
+  if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TREEHOUSE_HOME="$acquired" \
+    FM_FAKE_TREEHOUSE_KEEP_HOME=1 FM_FAKE_TMUX_LOG="$log" \
+    FM_SECONDMATE_CHARTER='replacement scope' FM_SECONDMATE_SCOPE='replacement scope' \
+    "$ROOT/bin/fm-home-seed.sh" replacement - alpha >/dev/null 2>"$second_err"; then
+    second_status=0
+  else
+    second_status=$?
+  fi
+  if [ -n "$marker_after_return" ]; then
+    grep -F 'already marked for retired' "$second_err" >/dev/null \
+      || fail "returned pool slice kept marker '$marker_after_return', but the next seed failed for another reason"
+    fail "returned pool slice kept marker '$marker_after_return' and the next dash seed refused it again"
+  fi
+  [ "$second_status" -eq 0 ] || fail "next dash seed failed after the returned marker was cleared"
+  [ "$(cat "$acquired/.fm-secondmate-home")" = replacement ] \
+    || fail "next dash seed did not publish its own identity marker"
+  pass "home seed rollback clears a retired marker before a returned pool slice is reused"
+}
+
 test_home_seed_warns_when_acquired_home_return_fails() {
   local home acquired acquired_abs fakebin log err lease
   home="$TMP_ROOT/dash-return-fail-home"
@@ -350,6 +405,8 @@ test_home_seed_warns_when_acquired_home_return_fails() {
   grep -F "warning: failed to return treehouse-acquired home $acquired_abs during seed rollback" "$err" >/dev/null \
     || fail "seed rollback did not warn when treehouse return failed"
   [ -f "$lease" ] || fail "failed rollback return did not preserve lease evidence"
+  [ "$(cat "$acquired/.fm-secondmate-home")" = other ] \
+    || fail "failed rollback return did not restore the acquired home's identity marker"
   grep -F "treehouse return --force $acquired_abs" "$log" >/dev/null \
     || fail "failed rollback did not attempt to return the acquired home"
   pass "home seed rollback warns when treehouse-acquired return fails"
@@ -2965,6 +3022,7 @@ test_home_seed_validate_rejects_duplicate_ids
 test_home_seed_validate_rejects_nested_homes
 test_home_seed_uses_treehouse_acquired_home
 test_home_seed_returns_treehouse_acquired_home_on_assignment_failure
+test_home_seed_clears_orphan_marker_from_returned_treehouse_home
 test_home_seed_warns_when_acquired_home_return_fails
 test_home_seed_does_not_return_unsafe_acquired_home
 test_home_seed_rolls_back_failed_clone

@@ -21,7 +21,9 @@
 #       Seeding is transactional: on validation, clone, init, or registry failure,
 #       generated briefs, new homes, new project clones, and registry edits are
 #       rolled back. Treehouse-acquired homes are returned only when the rollback
-#       target is safe; a failed return warns because the lease may still be held.
+#       target is safe, and a successful return removes the ignored identity marker
+#       so the pool slice can be leased again. A failed return warns because the
+#       lease may still be held.
 #       Set FM_SECONDMATE_CHARTER='<charter>' to seed from inline charter text
 #       when no filled charter brief exists. Set FM_SECONDMATE_SCOPE='<scope>'
 #       to override the registry routing scope. Otherwise the registry summary
@@ -576,16 +578,31 @@ seed_rollback_target() {
 }
 
 seed_return_treehouse_home() {
-  local home=$1 abs_home
+  local home=$1 abs_home marker marker_hold marker_staged=0
   abs_home=$(seed_rollback_target "$home" "treehouse-acquired home") || return 0
   if ! command -v treehouse >/dev/null 2>&1; then
     echo "warning: failed to return treehouse-acquired home $abs_home during seed rollback; treehouse command not found" >&2
     return 0
   fi
+  marker="$abs_home/$SUB_HOME_MARKER"
+  marker_hold="$marker.fm-seed-return.$$"
+  if [ -f "$marker" ] || [ -L "$marker" ]; then
+    if ! mv -- "$marker" "$marker_hold" 2>/dev/null; then
+      echo "warning: failed to return treehouse-acquired home $abs_home during seed rollback; could not stage its $SUB_HOME_MARKER marker for removal" >&2
+      return 0
+    fi
+    marker_staged=1
+  fi
   ( cd "$FM_ROOT" && treehouse return --force "$abs_home" >/dev/null ) || {
+    if [ "$marker_staged" -eq 1 ]; then
+      mv -f -- "$marker_hold" "$marker" 2>/dev/null || {
+        echo "warning: failed to restore $SUB_HOME_MARKER after treehouse return failed for $abs_home" >&2
+      }
+    fi
     echo "warning: failed to return treehouse-acquired home $abs_home during seed rollback; lease may still be held" >&2
     return 0
   }
+  [ "$marker_staged" -eq 0 ] || rm -f -- "$marker_hold" 2>/dev/null || true
 }
 
 seed_remove_created_home() {
