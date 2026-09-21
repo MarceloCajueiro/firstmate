@@ -60,6 +60,20 @@ run_case() {  # <case> <id>
     "$TEARDOWN" "$id" --force
 }
 
+run_case_without_force() {  # <case> <id>
+  local dir=$1 id=$2
+  FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$ROOT" \
+  FM_RUNTIME_LOG="$dir/runtime.log" PATH="$dir/fakebin:$PATH" \
+    "$TEARDOWN" "$id"
+}
+
+reconcile_reassigned_slot() {  # <case> <stale-task-id>
+  local dir=$1 id=$2
+  FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$ROOT" \
+  FM_RUNTIME_LOG="$dir/runtime.log" PATH="$dir/fakebin:$PATH" \
+    "$TEARDOWN" reconcile-reassigned-slot "$id"
+}
+
 assert_refused_without_mutation() {  # <case> <id> <description>
   local dir=$1 id=$2 description=$3 rc
   set +e
@@ -531,6 +545,201 @@ test_reused_pool_slot_refuses_before_touching_the_other_task() {
     || fail "teardown reached the runtime on a slot held by a secondmate home: $(cat "$dir/runtime.log")"
 
   pass "fm-teardown: a pool slot named by a second task record is never returned, killed, or reset"
+}
+
+test_reassigned_terminal_slot_records_can_be_reconciled_before_teardown() {
+  local dir stale=terminal-stale owner=terminal-owner stale_rc owner_rc
+
+  dir=$(make_case slot-reassigned-terminal-records)
+  mark_case_as_treehouse_pool "$dir"
+  fm_write_meta "$dir/home/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  fm_write_meta "$dir/home/state/$owner.meta" \
+    "window=firstmate:fm-$owner" "endpoint_task_id=$owner" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  printf 'done [at=1]: terminal fixture\n' > "$dir/home/state/$stale.status"
+  printf 'done [at=2]: terminal fixture\n' > "$dir/home/state/$owner.status"
+  claim_pool_slot "$dir" "$owner"
+
+  set +e
+  run_case "$dir" "$stale" > "$dir/stale-before.out" 2> "$dir/stale-before.err"
+  stale_rc=$?
+  run_case "$dir" "$owner" > "$dir/owner-before.out" 2> "$dir/owner-before.err"
+  owner_rc=$?
+  set -e
+  [ "$stale_rc" -ne 0 ] || fail "the stale terminal record unexpectedly tore down before reconciliation"
+  [ "$owner_rc" -ne 0 ] || fail "the owning terminal record unexpectedly tore down before reconciliation"
+  assert_contains "$(cat "$dir/stale-before.err")" "$owner" \
+    "the stale terminal refusal should name the owning record"
+  assert_contains "$(cat "$dir/owner-before.err")" "$stale" \
+    "the owning terminal refusal should name the stale record"
+  assert_present "$dir/home/state/$stale.meta" "the stale refusal removed its task record"
+  assert_present "$dir/home/state/$owner.meta" "the owner refusal removed its task record"
+  [ ! -s "$dir/runtime.log" ] \
+    || fail "either refused teardown reached the runtime: $(cat "$dir/runtime.log")"
+
+  reconcile_reassigned_slot "$dir" "$stale" \
+    > "$dir/reconcile.out" 2> "$dir/reconcile.err" \
+    || fail "the sanctioned reconcile verb failed: $(cat "$dir/reconcile.err")"
+  assert_present "$dir/home/state/$stale.meta" "reconcile removed the stale task record instead of detaching its slot"
+  assert_present "$dir/home/state/$owner.meta" "reconcile removed the owning task record"
+  assert_contains "$(cat "$dir/pool/1/.fm-slot-owner")" "task=$owner" \
+    "reconcile changed the real slot claim"
+
+  : > "$dir/runtime.log"
+  run_case "$dir" "$stale" > "$dir/stale-after.out" 2> "$dir/stale-after.err" \
+    || fail "the reconciled stale task still refused teardown: $(cat "$dir/stale-after.err")"
+  assert_absent "$dir/home/state/$stale.meta" "the reconciled stale task record survived teardown"
+  assert_present "$dir/home/state/$owner.meta" "stale teardown removed the owning task record"
+  assert_present "$dir/pool/1/.fm-slot-owner" "stale teardown removed the owner's slot claim"
+  ! grep -Fq "treehouse <return>" "$dir/runtime.log" \
+    || fail "stale teardown returned the reassigned slot: $(cat "$dir/runtime.log")"
+
+  : > "$dir/runtime.log"
+  run_case "$dir" "$owner" > "$dir/owner-after.out" 2> "$dir/owner-after.err" \
+    || fail "the owning task still refused teardown after stale reconciliation: $(cat "$dir/owner-after.err")"
+  assert_absent "$dir/home/state/$owner.meta" "the owning task record survived teardown"
+  assert_absent "$dir/pool/1/.fm-slot-owner" "the owning teardown left its spent slot claim"
+  grep -Fq "treehouse <return>" "$dir/runtime.log" \
+    || fail "the owning teardown did not return its slot: $(cat "$dir/runtime.log")"
+
+  pass "fm-teardown: two terminal records for one reassigned slot can be reconciled and torn down safely"
+}
+
+test_reassigned_slot_reconcile_refuses_nonterminal_live_and_ambiguous_records() {
+  local dir stale owner before rc
+
+  stale=nonterminal-stale
+  owner=nonterminal-owner
+  dir=$(make_case slot-reconcile-nonterminal)
+  mark_case_as_treehouse_pool "$dir"
+  fm_write_meta "$dir/home/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  fm_write_meta "$dir/home/state/$owner.meta" \
+    "window=firstmate:fm-$owner" "endpoint_task_id=$owner" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  claim_pool_slot "$dir" "$owner"
+  before=$(cat "$dir/home/state/$stale.meta")
+  set +e
+  reconcile_reassigned_slot "$dir" "$stale" > "$dir/reconcile.out" 2> "$dir/reconcile.err"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "reconcile accepted a task with no terminal declaration"
+  [ "$(cat "$dir/home/state/$stale.meta")" = "$before" ] \
+    || fail "nonterminal reconcile changed the stale task record"
+  assert_contains "$(cat "$dir/reconcile.err")" "no terminal" \
+    "nonterminal reconcile did not explain its refusal"
+
+  stale=live-stale
+  owner=live-owner
+  dir=$(make_case slot-reconcile-live)
+  mark_case_as_treehouse_pool "$dir"
+  fm_write_meta "$dir/home/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  fm_write_meta "$dir/home/state/$owner.meta" \
+    "window=firstmate:fm-$owner" "endpoint_task_id=$owner" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  printf 'done [at=1]: terminal declaration fixture\n' > "$dir/home/state/$stale.status"
+  claim_pool_slot "$dir" "$owner"
+  cat > "$dir/fakebin/tmux" <<SH
+#!/usr/bin/env bash
+if [ "\${1:-}" = list-windows ]; then
+  printf '%s\n' 'fm-$stale'
+elif [ "\${1:-}" = display-message ]; then
+  case "\${*: -1}" in
+    '#{pane_current_command}') printf '%s\n' claude ;;
+    '#{pane_tty}') printf '\n' ;;
+  esac
+fi
+exit 0
+SH
+  chmod +x "$dir/fakebin/tmux"
+  before=$(cat "$dir/home/state/$stale.meta")
+  set +e
+  reconcile_reassigned_slot "$dir" "$stale" > "$dir/reconcile.out" 2> "$dir/reconcile.err"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "reconcile accepted a record whose endpoint still runs an agent"
+  [ "$(cat "$dir/home/state/$stale.meta")" = "$before" ] \
+    || fail "live-endpoint reconcile changed the stale task record"
+  assert_contains "$(cat "$dir/reconcile.err")" "reads 'alive'" \
+    "live-endpoint reconcile did not report the recovery-grade verdict"
+
+  stale=ambiguous-stale
+  owner=recorded-owner
+  dir=$(make_case slot-reconcile-ambiguous)
+  mark_case_as_treehouse_pool "$dir"
+  fm_write_meta "$dir/home/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  fm_write_meta "$dir/home/state/$owner.meta" \
+    "window=firstmate:fm-$owner" "endpoint_task_id=$owner" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  printf 'failed [at=1]: terminal declaration fixture\n' > "$dir/home/state/$stale.status"
+  claim_pool_slot "$dir" unrecorded-owner
+  before=$(cat "$dir/home/state/$stale.meta")
+  set +e
+  reconcile_reassigned_slot "$dir" "$stale" > "$dir/reconcile.out" 2> "$dir/reconcile.err"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "reconcile guessed ownership when the claimant had no reachable record"
+  [ "$(cat "$dir/home/state/$stale.meta")" = "$before" ] \
+    || fail "ambiguous reconcile changed the stale task record"
+  assert_contains "$(cat "$dir/reconcile.err")" "ownership is ambiguous" \
+    "ambiguous reconcile did not explain its refusal"
+  assert_present "$dir/pool/1/.fm-slot-owner" "a refused reconcile removed the slot claim"
+  ! grep -Eq 'kill-window|treehouse <return>' "$dir/runtime.log" \
+    || fail "a refused reconcile reached a destructive runtime command: $(cat "$dir/runtime.log")"
+
+  pass "fm-teardown: reassigned-slot reconcile refuses nonterminal, live, and ambiguous records without mutation"
+}
+
+# The captain's case grants no discard authority, so the repair has to survive a
+# teardown run WITHOUT --force. A reconciled record still names the slot the pool
+# re-lent, so the ordinary landed-work test must not read the claimant's checkout
+# as this task's own work: that would either refuse forever or invite a --force
+# that discards work belonging to a different task.
+test_reconciled_record_tears_down_without_force_and_spares_claimant_work() {
+  local dir stale=noforce-stale owner=noforce-owner claimant_work
+
+  dir=$(make_case slot-reconciled-no-force)
+  mark_case_as_treehouse_pool "$dir"
+  fm_write_meta "$dir/home/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=ship"
+  fm_write_meta "$dir/home/state/$owner.meta" \
+    "window=firstmate:fm-$owner" "endpoint_task_id=$owner" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=ship"
+  printf 'done [at=1]: terminal fixture\n' > "$dir/home/state/$stale.status"
+  printf 'done [at=2]: terminal fixture\n' > "$dir/home/state/$owner.status"
+  claim_pool_slot "$dir" "$owner"
+
+  # Uncommitted work in the re-lent slot belongs to the claimant, not the stale task.
+  claimant_work="$dir/pool/1/project/claimant-work.txt"
+  printf 'uncommitted work belonging to the claimant\n' > "$claimant_work"
+
+  reconcile_reassigned_slot "$dir" "$stale" \
+    > "$dir/reconcile.out" 2> "$dir/reconcile.err" \
+    || fail "the sanctioned reconcile verb failed: $(cat "$dir/reconcile.err")"
+
+  : > "$dir/runtime.log"
+  run_case_without_force "$dir" "$stale" \
+    > "$dir/stale-after.out" 2> "$dir/stale-after.err" \
+    || fail "the reconciled record refused an unforced teardown: $(cat "$dir/stale-after.err")"
+  assert_absent "$dir/home/state/$stale.meta" "the reconciled record survived its unforced teardown"
+  assert_present "$dir/home/state/$owner.meta" "the unforced teardown removed the claimant's record"
+  assert_present "$claimant_work" "the unforced teardown discarded the claimant's uncommitted work"
+  assert_contains "$(cat "$claimant_work")" "belonging to the claimant" \
+    "the unforced teardown rewrote the claimant's uncommitted work"
+  assert_contains "$(cat "$dir/pool/1/.fm-slot-owner")" "task=$owner" \
+    "the unforced teardown disturbed the real slot claim"
+  ! grep -Fq "treehouse <return>" "$dir/runtime.log" \
+    || fail "the unforced teardown returned the reassigned slot: $(cat "$dir/runtime.log")"
+
+  pass "fm-teardown: a reconciled record tears down without --force while the claimant's slot work is untouched"
 }
 
 test_cross_home_pool_slot_collision_refuses() {
@@ -1383,6 +1592,9 @@ test_orca_close_failure_refuses_even_under_force
 test_already_gone_endpoint_still_completes_without_a_refusal
 test_bare_relative_origin_shares_project_lock_with_clone
 test_reused_pool_slot_refuses_before_touching_the_other_task
+test_reassigned_terminal_slot_records_can_be_reconciled_before_teardown
+test_reassigned_slot_reconcile_refuses_nonterminal_live_and_ambiguous_records
+test_reconciled_record_tears_down_without_force_and_spares_claimant_work
 test_cross_home_pool_slot_collision_refuses
 test_sole_slot_record_still_tears_down
 test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot

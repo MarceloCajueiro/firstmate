@@ -130,7 +130,27 @@
 # descendant Treehouse slot before touching any child.
 # These refusals are not relaxed by --force: --force authorizes discarding THIS
 # task's unlanded work, never another task's live work. Nothing of this task's
-# own is removed by a refusal; reconcile whichever record is wrong and re-run.
+# own is removed by a refusal. `reconcile-reassigned-slot <task-id>` is the
+# sanctioned repair when the slot claim names another task and exactly one
+# reachable task record for that claimant names the same slot. It requires the
+# stale task to have a terminal status declaration and a recovery-grade dead or
+# missing endpoint, then atomically marks that record as detached from slot
+# cleanup. It never kills a process, inspects or resets the checkout, returns the
+# slot, or changes the claim. A detached record no longer vetoes the claimant's
+# teardown, and its own teardown skips every slot step even if the claim later
+# disappears or changes. Missing, unreadable, contradictory, live, or ambiguous
+# evidence refuses without changing the record.
+# The detachment is recorded as exactly one pair of task-record fields written
+# only by that verb: treehouse_slot_reassigned_path, the canonical slot path the
+# record is detached from, and treehouse_slot_reassigned_to, the task id the slot
+# claim named at reconcile time. Both must be present exactly once and the path
+# must still match the record's current canonical slot; any partial, duplicated,
+# or contradictory form refuses every later teardown of that record rather than
+# being repaired or ignored. Because detachment makes teardown skip the worktree
+# entirely, a detached record's own teardown also skips the ordinary dirty and
+# landed-work test, which is what lets it finish without --force: the re-lent
+# slot's contents are the claimant's work, so this task neither proves nor
+# discards anything there.
 # Orca is not a pool slot and proves its path through
 # require_orca_worktree_path_match instead.
 # Orca tasks use the same safety checks, then close the recorded terminal and
@@ -162,6 +182,7 @@
 # never left leased forever. If the treehouse return fails, teardown leaves the
 # leased home and state in place instead of hiding a still-held lease.
 # Usage: fm-teardown.sh <task-id> [--force] [--legacy-record]
+#        fm-teardown.sh reconcile-reassigned-slot <task-id>
 #   --force skips ordinary-task dirty and landed-work checks, skips scout report
 #   checks, and discards secondmate child work for kind=secondmate. Only use it
 #   when the captain has explicitly said to discard the work.
@@ -297,6 +318,11 @@ SUB_HOME_PARENT_MARKER=".fm-secondmate-parent"
 . "$SCRIPT_DIR/fm-pending-reply-lib.sh"
 # shellcheck source=bin/fm-nm-run-lib.sh
 . "$SCRIPT_DIR/fm-nm-run-lib.sh"
+TEARDOWN_ACTION=teardown
+if [ "${1:-}" = reconcile-reassigned-slot ]; then
+  TEARDOWN_ACTION=reconcile-reassigned-slot
+  shift
+fi
 if [ "$#" -lt 1 ] || ! fm_task_id_path_safe "$1"; then
   echo "error: invalid teardown request" >&2
   exit 2
@@ -305,6 +331,10 @@ ID=$1
 FORCE=
 LEGACY_RECORD_GIVEN=0
 shift
+if [ "$TEARDOWN_ACTION" = reconcile-reassigned-slot ] && [ "$#" -ne 0 ]; then
+  echo "error: invalid teardown request" >&2
+  exit 2
+fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --force) FORCE=--force ;;
@@ -335,7 +365,231 @@ if [ "$FORCE" = --force ] && [ "$(fm_lease_actor)" = branch ]; then
   echo "error: forced teardown refused - the supervision branch cannot discard work" >&2
   exit "$FM_LEASE_REFUSE_EXIT"
 fi
-fm_lease_guard "$ID" "teardown (fm-teardown)"
+fm_lease_guard "$ID" "$TEARDOWN_ACTION (fm-teardown)"
+
+canonical_existing_dir() {
+  local target=$1
+  [ -n "$target" ] || return 1
+  [ -d "$target" ] || return 1
+  ( cd "$target" && pwd -P )
+}
+
+collect_local_firstmate_states() {
+  local record_state=$1 root home reg line child known existing i=0
+  local -a homes
+  TREEHOUSE_OWNER_STATES=("$record_state")
+  root=$(fm_firstmate_root_home "$FM_HOME") || {
+    echo "REFUSED: cannot resolve the root Firstmate home; nothing was changed" >&2
+    return 1
+  }
+  homes=("$root")
+  while [ "$i" -lt "${#homes[@]}" ]; do
+    home=${homes[$i]}
+    i=$((i + 1))
+    known=0
+    for existing in "${TREEHOUSE_OWNER_STATES[@]}"; do
+      [ "$existing" != "$home/state" ] || known=1
+    done
+    [ "$known" = 1 ] || TREEHOUSE_OWNER_STATES+=("$home/state")
+    reg="$home/data/secondmates.md"
+    [ ! -e "$reg" ] && [ ! -L "$reg" ] && continue
+    [ -f "$reg" ] && [ ! -L "$reg" ] || {
+      echo "REFUSED: local Firstmate registry is unsafe at $reg; nothing was changed" >&2
+      return 1
+    }
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        "- "*)
+          secondmate_registry_parse_line "$line" || {
+            echo "REFUSED: malformed local Firstmate registry entry in $reg; nothing was changed" >&2
+            return 1
+          }
+          [ "$SECONDMATE_REGISTRY_REMOTE" -eq 0 ] || continue
+          child=$(canonical_existing_dir "$SECONDMATE_REGISTRY_HOME") || {
+            echo "REFUSED: registered local Firstmate home is unavailable: $SECONDMATE_REGISTRY_HOME; nothing was changed" >&2
+            return 1
+          }
+          known=0
+          for existing in "${homes[@]}"; do
+            [ "$existing" != "$child" ] || known=1
+          done
+          [ "$known" = 1 ] || homes+=("$child")
+          ;;
+      esac
+    done < "$reg"
+  done
+}
+
+# A task record may be detached from one exact Treehouse slot only through the
+# reconcile verb below. The two fields form one fail-closed marker: both must
+# occur exactly once, the path must still name the record's current canonical
+# slot, and the claimant must remain a valid task id. Returns 0 for a valid
+# marker, 1 when no marker exists, and 2 for any partial or contradictory form.
+TEARDOWN_REASSIGNED_RECORD_TO=
+teardown_reassigned_record_state() {  # <meta> <canonical-slot>
+  local meta=$1 slot=$2 path_count to_count path to
+  TEARDOWN_REASSIGNED_RECORD_TO=
+  path_count=$(LC_ALL=C awk -F= '$1 == "treehouse_slot_reassigned_path" { n++ } END { print n + 0 }' "$meta" 2>/dev/null) \
+    || return 2
+  to_count=$(LC_ALL=C awk -F= '$1 == "treehouse_slot_reassigned_to" { n++ } END { print n + 0 }' "$meta" 2>/dev/null) \
+    || return 2
+  if [ "$path_count" -eq 0 ] && [ "$to_count" -eq 0 ]; then
+    return 1
+  fi
+  [ "$path_count" -eq 1 ] && [ "$to_count" -eq 1 ] || return 2
+  path=$(fm_meta_get "$meta" treehouse_slot_reassigned_path)
+  to=$(fm_meta_get "$meta" treehouse_slot_reassigned_to)
+  [ "$path" = "$slot" ] || return 2
+  fm_task_id_path_safe "$to" || return 2
+  TEARDOWN_REASSIGNED_RECORD_TO=$to
+  return 0
+}
+
+teardown_reassigned_record_refusal() {  # <task-id> <meta>
+  echo "REFUSED: task $1 has incomplete or contradictory reassigned-slot metadata in $2; nothing was changed" >&2
+  echo "Repair the task record from trusted evidence, then retry teardown or reconcile-reassigned-slot." >&2
+}
+
+reconcile_reassigned_slot_record() {
+  local slot backend target endpoint_state kind status_line status_verb claim_id
+  local state_dir other other_id other_path other_slot other_kind other_backend
+  local owner_meta='' owner_count=0 marker_state tmp
+
+  fm_backend_validate_task_endpoint "$META" "$ID" || return 1
+  backend=$FM_BACKEND_VALIDATED_BACKEND
+  target=$FM_BACKEND_VALIDATED_TARGET
+  kind=$(fm_meta_get "$META" kind)
+  [ -n "$kind" ] || kind=ship
+  [ "$kind" != secondmate ] && [ "$backend" != orca ] || {
+    echo "REFUSED: reconcile-reassigned-slot applies only to ordinary Treehouse task records; nothing was changed" >&2
+    return 1
+  }
+  slot=$(canonical_existing_dir "$(fm_meta_get "$META" worktree)") || {
+    echo "REFUSED: task $ID no longer names a live worktree directory; nothing was changed" >&2
+    return 1
+  }
+  fm_treehouse_pool_slot "$(fm_meta_get "$META" project)" "$slot" || {
+    echo "REFUSED: task $ID does not name a verified Treehouse pool slot; nothing was changed" >&2
+    return 1
+  }
+  if [ "$TREEHOUSE_PROJECT_LOCK_HELD" != 1 ]; then
+    echo "REFUSED: task $ID's Treehouse project lock is not held; nothing was changed" >&2
+    return 1
+  fi
+
+  status_line=$(status_current_line "$STATE/$ID.status" "$kind")
+  status_verb=
+  status_line_verb "$status_line" status_verb
+  case "$status_verb" in
+    done|failed) ;;
+    *)
+      echo "REFUSED: task $ID has no terminal done or failed status declaration; nothing was changed" >&2
+      return 1
+      ;;
+  esac
+  endpoint_state=$(fm_backend_agent_state "$backend" "$target")
+  case "$endpoint_state" in
+    dead|missing) ;;
+    *)
+      echo "REFUSED: task $ID's recorded endpoint reads '$endpoint_state', not confidently dead or agent-less; nothing was changed" >&2
+      return 1
+      ;;
+  esac
+
+  teardown_reassigned_record_state "$META" "$slot" && marker_state=0 || marker_state=$?
+  case "$marker_state" in
+    0)
+      printf 'reassigned Treehouse slot already reconciled for %s (slot %s left to %s)\n' \
+        "$ID" "$slot" "$TEARDOWN_REASSIGNED_RECORD_TO"
+      return 0
+      ;;
+    1) ;;
+    *) teardown_reassigned_record_refusal "$ID" "$META"; return 1 ;;
+  esac
+
+  fm_treehouse_slot_owner_state "$slot" "$ID"
+  case "$FM_TREEHOUSE_SLOT_OWNER" in
+    other) claim_id=$FM_TREEHOUSE_SLOT_OWNER_ID ;;
+    mine)
+      echo "REFUSED: task $ID still owns the slot claim at $slot; nothing was changed" >&2
+      return 1
+      ;;
+    absent)
+      echo "REFUSED: the slot claim at $slot is absent, so reassignment cannot be proved; nothing was changed" >&2
+      return 1
+      ;;
+    *)
+      echo "REFUSED: the slot claim at $slot is unreadable, so reassignment cannot be proved; nothing was changed" >&2
+      return 1
+      ;;
+  esac
+  fm_task_id_path_safe "$claim_id" || {
+    echo "REFUSED: the slot claim at $slot names an invalid task id; nothing was changed" >&2
+    return 1
+  }
+
+  collect_local_firstmate_states "$STATE" || return 1
+  for state_dir in "${TREEHOUSE_OWNER_STATES[@]}"; do
+    for other in "$state_dir"/*.meta; do
+      [ -f "$other" ] && [ ! -L "$other" ] || continue
+      [ "$other" != "$META" ] || continue
+      other_id=$(basename "$other" .meta)
+      [ "$other_id" = "$claim_id" ] || continue
+      other_path=$(fm_meta_get "$other" worktree)
+      [ -n "$other_path" ] || continue
+      other_slot=$(canonical_existing_dir "$other_path") || continue
+      [ "$other_slot" = "$slot" ] || continue
+      owner_count=$((owner_count + 1))
+      owner_meta=$other
+    done
+  done
+  if [ "$owner_count" -ne 1 ]; then
+    echo "REFUSED: slot claim task $claim_id has $owner_count reachable task records naming $slot; ownership is ambiguous and nothing was changed" >&2
+    return 1
+  fi
+  fm_backend_validate_task_endpoint "$owner_meta" "$claim_id" || {
+    echo "REFUSED: claimant task $claim_id does not have one valid cleanup endpoint; nothing was changed" >&2
+    return 1
+  }
+  other_kind=$(fm_meta_get "$owner_meta" kind)
+  [ -n "$other_kind" ] || other_kind=ship
+  other_backend=$(fm_backend_of_meta "$owner_meta")
+  [ "$other_kind" != secondmate ] && [ "$other_backend" != orca ] || {
+    echo "REFUSED: claimant task $claim_id is not an ordinary Treehouse task record; nothing was changed" >&2
+    return 1
+  }
+  teardown_reassigned_record_state "$owner_meta" "$slot" && marker_state=0 || marker_state=$?
+  case "$marker_state" in
+    1) ;;
+    0)
+      echo "REFUSED: claimant task $claim_id is itself detached from $slot; ownership is contradictory and nothing was changed" >&2
+      return 1
+      ;;
+    *) teardown_reassigned_record_refusal "$claim_id" "$owner_meta"; return 1 ;;
+  esac
+
+  case "$slot" in *[$'\n\r']*)
+    echo "REFUSED: the canonical slot path cannot be represented safely in task metadata; nothing was changed" >&2
+    return 1
+    ;;
+  esac
+  tmp=$(umask 077; mktemp "$STATE/.$ID.meta.slot-reconcile.XXXXXX") || {
+    echo "REFUSED: could not stage reconciled metadata for task $ID; nothing was changed" >&2
+    return 1
+  }
+  if ! LC_ALL=C awk -F= \
+      '$1 != "treehouse_slot_reassigned_path" && $1 != "treehouse_slot_reassigned_to" { print }' \
+      "$META" > "$tmp" \
+     || ! printf 'treehouse_slot_reassigned_path=%s\ntreehouse_slot_reassigned_to=%s\n' \
+       "$slot" "$claim_id" >> "$tmp" \
+     || ! fm_backlog_atomic_transition publish "$tmp" "$META" "task record" "$STATE"; then
+    rm -f "$tmp"
+    echo "REFUSED: could not publish reconciled metadata for task $ID; nothing was changed" >&2
+    return 1
+  fi
+  printf 'reconciled reassigned Treehouse slot for %s (slot %s left to %s)\n' \
+    "$ID" "$slot" "$claim_id"
+}
 
 META="$STATE/$ID.meta"
 TREEHOUSE_PROJECT_LOCK=
@@ -431,6 +685,10 @@ fm_backlog_record_present "$META" "task record" "$STATE" || {
   echo "error: teardown refused after locking: $FM_BACKLOG_TRANSITION_ERROR" >&2
   exit 1
 }
+if [ "$TEARDOWN_ACTION" = reconcile-reassigned-slot ]; then
+  reconcile_reassigned_slot_record
+  exit $?
+fi
 TEARDOWN_META_KIND=$(fm_meta_get "$META" kind)
 [ -n "$TEARDOWN_META_KIND" ] || TEARDOWN_META_KIND=ship
 TEARDOWN_CLEANUP_RECOVERY=$(fm_meta_get "$META" cleanup_recovery)
@@ -1547,13 +1805,6 @@ inspectable_git_worktree() {
   git -C "$top" rev-parse --git-dir >/dev/null 2>&1
 }
 
-canonical_existing_dir() {
-  local target=$1
-  [ -n "$target" ] || return 1
-  [ -d "$target" ] || return 1
-  ( cd "$target" && pwd -P )
-}
-
 retry_wait_secs_is_valid() {
   [[ "$1" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]]
 }
@@ -2157,55 +2408,9 @@ teardown_live_slot_path() {
   canonical_existing_dir "$WT"
 }
 
-collect_local_firstmate_states() {
-  local record_state=$1 root home reg line child known existing i=0
-  local -a homes
-  TREEHOUSE_OWNER_STATES=("$record_state")
-  root=$(fm_firstmate_root_home "$FM_HOME") || {
-    echo "REFUSED: cannot resolve the root Firstmate home; nothing was changed" >&2
-    return 1
-  }
-  homes=("$root")
-  while [ "$i" -lt "${#homes[@]}" ]; do
-    home=${homes[$i]}
-    i=$((i + 1))
-    known=0
-    for existing in "${TREEHOUSE_OWNER_STATES[@]}"; do
-      [ "$existing" != "$home/state" ] || known=1
-    done
-    [ "$known" = 1 ] || TREEHOUSE_OWNER_STATES+=("$home/state")
-    reg="$home/data/secondmates.md"
-    [ ! -e "$reg" ] && [ ! -L "$reg" ] && continue
-    [ -f "$reg" ] && [ ! -L "$reg" ] || {
-      echo "REFUSED: local Firstmate registry is unsafe at $reg; nothing was changed" >&2
-      return 1
-    }
-    while IFS= read -r line || [ -n "$line" ]; do
-      case "$line" in
-        "- "*)
-          secondmate_registry_parse_line "$line" || {
-            echo "REFUSED: malformed local Firstmate registry entry in $reg; nothing was changed" >&2
-            return 1
-          }
-          [ "$SECONDMATE_REGISTRY_REMOTE" -eq 0 ] || continue
-          child=$(canonical_existing_dir "$SECONDMATE_REGISTRY_HOME") || {
-            echo "REFUSED: registered local Firstmate home is unavailable: $SECONDMATE_REGISTRY_HOME; nothing was changed" >&2
-            return 1
-          }
-          known=0
-          for existing in "${homes[@]}"; do
-            [ "$existing" != "$child" ] || known=1
-          done
-          [ "$known" = 1 ] || homes+=("$child")
-          ;;
-      esac
-    done < "$reg"
-  done
-}
-
 require_exclusive_worktree_slot_record() {
   local record_meta=$1 record_id=$2 record_state=$3 worktree=$4
-  local slot state_dir other other_id field other_path other_slot
+  local slot state_dir other other_id field other_path other_slot marker_state
   slot=$(canonical_existing_dir "$worktree") || return 0
   collect_local_firstmate_states "$record_state" || return 1
   for state_dir in "${TREEHOUSE_OWNER_STATES[@]}"; do
@@ -2218,9 +2423,15 @@ require_exclusive_worktree_slot_record() {
         [ -n "$other_path" ] || continue
         other_slot=$(canonical_existing_dir "$other_path") || continue
         [ "$other_slot" = "$slot" ] || continue
+        teardown_reassigned_record_state "$other" "$slot" && marker_state=0 || marker_state=$?
+        case "$marker_state" in
+          0) continue ;;
+          1) ;;
+          *) teardown_reassigned_record_refusal "$other_id" "$other"; return 1 ;;
+        esac
         echo "REFUSED: task $record_id's recorded worktree $slot is also task $other_id's recorded $field." >&2
         echo "Returning that pool slot would kill $other_id's processes and reset its copy, so nothing was changed - not even with --force." >&2
-        echo "Reconcile whichever record is wrong (bin/fm-crew-state.sh $record_id; bin/fm-crew-state.sh $other_id), then re-run teardown." >&2
+        echo "Inspect both records (bin/fm-crew-state.sh $record_id; bin/fm-crew-state.sh $other_id). If the slot claim proves one was reassigned, run bin/fm-teardown.sh reconcile-reassigned-slot <stale-task-id>, then re-run teardown." >&2
         return 1
       done
     done
@@ -2228,8 +2439,14 @@ require_exclusive_worktree_slot_record() {
 }
 
 require_exclusive_task_worktree_slot() {
-  local slot
+  local slot marker_state
   slot=$(teardown_live_slot_path) || return 0
+  teardown_reassigned_record_state "$META" "$slot" && marker_state=0 || marker_state=$?
+  case "$marker_state" in
+    0) return 0 ;;
+    1) ;;
+    *) teardown_reassigned_record_refusal "$ID" "$META"; return 1 ;;
+  esac
   require_exclusive_worktree_slot_record "$META" "$ID" "$STATE" "$slot"
 }
 
@@ -2257,8 +2474,21 @@ require_exclusive_task_worktree_slot() {
 # would strand every task in flight across the change for no evidence at all.
 # Those keep exactly the record-scan protection they had before.
 TEARDOWN_SLOT_REASSIGNED_RC=3
-require_owned_worktree_slot_record() {  # <task-id> <worktree>
-  local record_id=$1 worktree=$2 marker
+require_owned_worktree_slot_record() {  # <task-id> <worktree> [meta]
+  local record_id=$1 worktree=$2 meta=${3:-} marker marker_state slot
+  if [ -n "$meta" ]; then
+    slot=$(canonical_existing_dir "$worktree") || return 0
+    teardown_reassigned_record_state "$meta" "$slot" && marker_state=0 || marker_state=$?
+    case "$marker_state" in
+      0)
+        FM_TREEHOUSE_SLOT_OWNER_ID=$TEARDOWN_REASSIGNED_RECORD_TO
+        FM_TREEHOUSE_SLOT_OWNER_HOME=
+        return "$TEARDOWN_SLOT_REASSIGNED_RC"
+        ;;
+      1) ;;
+      *) teardown_reassigned_record_refusal "$record_id" "$meta"; return 1 ;;
+    esac
+  fi
   fm_treehouse_slot_owner_state "$worktree" "$record_id"
   case "$FM_TREEHOUSE_SLOT_OWNER" in
     mine|absent) return 0 ;;
@@ -2282,7 +2512,7 @@ TEARDOWN_SLOT_REASSIGNED_HOME=
 require_owned_task_worktree_slot() {
   local slot rc=0
   slot=$(teardown_live_slot_path) || return 0
-  require_owned_worktree_slot_record "$ID" "$slot" || rc=$?
+  require_owned_worktree_slot_record "$ID" "$slot" "$META" || rc=$?
   case "$rc" in
     0) return 0 ;;
     "$TEARDOWN_SLOT_REASSIGNED_RC")
@@ -2818,7 +3048,7 @@ preflight_descendant_treehouse_slots() {
     fm_backend_validate_task_endpoint "$meta" "$task_id" || return 1
     require_exclusive_worktree_slot_record "$meta" "$task_id" "$state" "$worktree" || return 1
     owner_rc=0
-    require_owned_worktree_slot_record "$task_id" "$worktree" || owner_rc=$?
+    require_owned_worktree_slot_record "$task_id" "$worktree" "$meta" || owner_rc=$?
     case "$owner_rc" in
       0|"$TEARDOWN_SLOT_REASSIGNED_RC") ;;
       *) return 1 ;;
@@ -2827,7 +3057,8 @@ preflight_descendant_treehouse_slots() {
 }
 
 validate_firstmate_home_children_removal() {
-  local home=$1 sub_state child_meta child_id child_wt child_proj child_kind child_home child_backend child_orca_worktree_id
+  local home=$1 sub_state child_meta child_id child_wt child_proj child_kind child_home
+  local child_backend child_orca_worktree_id child_slot marker_state
   sub_state="$home/state"
   [ -d "$sub_state" ] || return 0
   for child_meta in "$sub_state"/*.meta; do
@@ -2853,7 +3084,17 @@ validate_firstmate_home_children_removal() {
       fi
     elif [ -n "$child_wt" ] && [ -e "$child_wt" ]; then
       child_proj=$(meta_value "$child_meta" project)
-      validate_child_worktree_for_removal "$child_wt" "$child_proj" >/dev/null || return 1
+      marker_state=1
+      if fm_treehouse_pool_slot "$child_proj" "$child_wt"; then
+        child_slot=$(canonical_existing_dir "$child_wt") || return 1
+        teardown_reassigned_record_state "$child_meta" "$child_slot" \
+          && marker_state=0 || marker_state=$?
+      fi
+      case "$marker_state" in
+        0) ;;
+        1) validate_child_worktree_for_removal "$child_wt" "$child_proj" >/dev/null || return 1 ;;
+        *) teardown_reassigned_record_refusal "$child_id" "$child_meta"; return 1 ;;
+      esac
     fi
   done
 }
@@ -3103,12 +3344,12 @@ cleanup_firstmate_home_children() {
       # already named the reassignment on stderr under the same lock.
       child_owner_rc=0
       if fm_treehouse_pool_slot "$child_proj" "$child_wt"; then
-        require_owned_worktree_slot_record "$child_id" "$child_wt" 2>/dev/null || child_owner_rc=$?
+        require_owned_worktree_slot_record "$child_id" "$child_wt" "$child_meta" 2>/dev/null || child_owner_rc=$?
       fi
       if [ "$child_owner_rc" -eq "$TEARDOWN_SLOT_REASSIGNED_RC" ]; then
         :
       elif [ "$child_owner_rc" -ne 0 ]; then
-        require_owned_worktree_slot_record "$child_id" "$child_wt" || return 1
+        require_owned_worktree_slot_record "$child_id" "$child_wt" "$child_meta" || return 1
       else
         validate_child_worktree_for_removal "$child_wt" "$child_proj" >/dev/null || return 1
         rm -f "$child_wt/.claude/settings.local.json" "$child_wt/.opencode/plugins/fm-turn-end.js" \
