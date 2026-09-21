@@ -1,0 +1,12 @@
+##### test_home_seed_clears_orphan_marker_from_returned_treehouse_home (target a936042) #####
+ok - home seed rollback clears retired identity and parent markers before a returned pool slice is reused
+targeted run complete
+EXIT=0
+##### test_home_seed_warns_when_acquired_home_return_fails (target a936042) #####
+ok - home seed rollback warns when treehouse-acquired return fails
+targeted run complete
+EXIT=0
+##### test_home_seed_restores_markers_after_reset_removes_staged_holds (target a936042) #####
+ok - home seed rollback restores staged markers from the backup after the return reset removes them
+targeted run complete
+EXIT=0

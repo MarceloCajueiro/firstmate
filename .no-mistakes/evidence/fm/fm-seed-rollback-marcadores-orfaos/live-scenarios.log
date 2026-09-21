@@ -1,0 +1,90 @@
+
+===== Scenario A setup (lab=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ) =====
+🌳 Worktree returned to pool.
+pool slice: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/poolroot/.treehouse/repo-aaa176/1/repo
+before first seed: home=retired parent=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/retired-parent
+
+===== Scenario A first seed (must refuse on the orphan marker) =====
+exit=1
+🌳 Setting up worktree...
+🌳 Leased worktree at /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/poolroot/.treehouse/repo-aaa176/1/repo. Run 'treehouse return /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/poolroot/.treehouse/repo-aaa176/1/repo' to release it.
+error: secondmate home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/poolroot/.treehouse/repo-aaa176/1/repo is already marked for retired
+🌳 Worktree returned to pool.
+PASS: first seed refused the orphan marker
+PASS: rollback returned the slice to the pool
+identity marker after rollback: cleared
+parent marker after rollback: cleared
+PASS: identity marker cleared
+PASS: parent marker cleared
+PASS: no staged hold left in the slice
+
+===== Scenario A second seed (must reuse the same slice and succeed) =====
+exit=0
+🌳 Setting up worktree...
+🌳 Leased worktree at /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/poolroot/.treehouse/repo-aaa176/1/repo. Run 'treehouse return /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/poolroot/.treehouse/repo-aaa176/1/repo' to release it.
+scaffolded: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/activehome/data/second/brief.md (secondmate charter)
+home=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/poolroot/.treehouse/repo-aaa176/1/repo
+PASS: second seed succeeded
+PASS: second seed reused the same slice
+PASS: second seed did not fail on a stale parent binding
+identity marker now: second
+parent binding now:
+schema=fm-secondmate-parent.v1
+route=local
+parent_home=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/activehome
+registry now:
+- second - replacement scope (home: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ/poolroot/.treehouse/repo-aaa176/1/repo; scope: replacement scope; projects: alpha; added 2026-09-21)
+PASS: second seed published its own identity marker
+
+LAB_A=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-a.q70zBZ
+
+===== Scenario B setup (lab=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-b.uCqazZ) =====
+🌳 Worktree returned to pool.
+🌳 Worktree returned to pool.
+slice 1: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-b.uCqazZ/poolroot/.treehouse/repo-8dd798/1/repo
+slice 2: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-b.uCqazZ/poolroot/.treehouse/repo-8dd798/2/repo
+
+===== Scenario B seed acquires one orphan slice and fails =====
+exit=1
+🌳 Setting up worktree...
+🌳 Leased worktree at /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-b.uCqazZ/poolroot/.treehouse/repo-8dd798/1/repo. Run 'treehouse return /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-b.uCqazZ/poolroot/.treehouse/repo-8dd798/1/repo' to release it.
+error: secondmate home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-b.uCqazZ/poolroot/.treehouse/repo-8dd798/1/repo is already marked for retired-a
+🌳 Worktree returned to pool.
+slice 1 after: (markers cleared)
+slice 2 after: 
+slice 2 identity: retired-b
+slice 2 retained: data=charter.md  projects=keep-b 
+PASS: acquired slice markers cleared
+PASS: other orphan slice identity untouched
+PASS: other orphan slice parent untouched
+PASS: other orphan slice retired content untouched
+
+LAB_B=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-b.uCqazZ
+
+===== Scenario C setup (lab=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-c.UOGzZL) =====
+🌳 Worktree returned to pool.
+before: home=dash
+
+===== Scenario C seed fails and the real treehouse return fails after the reset =====
+exit=1
+🌳 Setting up worktree...
+🌳 Leased worktree at /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-c.UOGzZL/poolroot/.treehouse/repo-f0afeb/1/repo. Run 'treehouse return /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-c.UOGzZL/poolroot/.treehouse/repo-f0afeb/1/repo' to release it.
+error: no filled secondmate charter brief at /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-c.UOGzZL/activehome/data/dash/brief.md; set FM_SECONDMATE_CHARTER or scaffold one and replace {TASK}
+failed to return worktree: open /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-c.UOGzZL/poolroot/.treehouse/repo-f0afeb/treehouse-state.json.tmp-1b4dba2bbcaec49b: permission denied
+warning: failed to return treehouse-acquired home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-c.UOGzZL/poolroot/.treehouse/repo-f0afeb/1/repo during seed rollback; lease may still be held
+after: identity=dash
+after: parent=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-c.UOGzZL/activehome
+staged holds left: 
+PASS: seed failed at the missing charter brief
+PASS: rollback reported the failed return
+PASS: real return failed from the injected permission fault
+PASS: staged hold was deleted by the reset
+PASS: identity marker restored from backup
+PASS: parent marker restored from backup
+lease still held:
+1     leased       /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-c.UOGzZL/poolroot/.treehouse/repo-f0afeb/1/repo  (held by dash)
+
+LAB_C=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-seed-live-c.UOGzZL
+
+===== RESULT =====
+ALL LIVE CHECKS PASSED

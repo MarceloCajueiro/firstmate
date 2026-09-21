@@ -1,0 +1,6 @@
+##### test_home_seed_clears_orphan_marker_from_returned_treehouse_home (intermediate 5d2dfa2) #####
+not ok - rollback left the returned slice's stale parent binding behind
+EXIT=1
+##### test_home_seed_restores_markers_after_reset_removes_staged_holds (intermediate 5d2dfa2) #####
+not ok - failed rollback return did not restore the identity marker after the reset removed its staged hold
+EXIT=1
