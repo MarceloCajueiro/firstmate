@@ -15,7 +15,9 @@
 # treehouse (durable lease of FM_FAKE_TREEHOUSE_HOME, recording the lease holder
 # to FM_FAKE_TREEHOUSE_LEASE_FILE; `return` removes the target and lease unless
 # FM_FAKE_TREEHOUSE_RETURN_FAIL is set, while FM_FAKE_TREEHOUSE_KEEP_HOME=1
-# preserves the returned pool slice). Echoes the fakebin dir.
+# preserves the returned pool slice and FM_FAKE_TREEHOUSE_RESET_HOME=1 models the
+# worktree reset's git clean removing untracked non-ignored staged files). Echoes
+# the fakebin dir.
 make_fake_tmux() {
   local dir=$1 fakebin capture
   fakebin=$(fm_fakebin "$dir")
@@ -122,6 +124,9 @@ case "${1:-}" in
       esac
       shift
     done
+    if [ -n "$target" ] && [ "${FM_FAKE_TREEHOUSE_RESET_HOME:-}" = 1 ]; then
+      rm -f -- "$target"/.*.fm-seed-return.* 2>/dev/null || true
+    fi
     [ -z "${FM_FAKE_TREEHOUSE_RETURN_FAIL:-}" ] || exit 17
     [ -n "${FM_FAKE_TREEHOUSE_LEASE_FILE:-}" ] && rm -f "$FM_FAKE_TREEHOUSE_LEASE_FILE"
     if [ -n "$target" ] && [ "${FM_FAKE_TREEHOUSE_KEEP_HOME:-}" != 1 ]; then

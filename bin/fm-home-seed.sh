@@ -21,9 +21,9 @@
 #       Seeding is transactional: on validation, clone, init, or registry failure,
 #       generated briefs, new homes, new project clones, and registry edits are
 #       rolled back. Treehouse-acquired homes are returned only when the rollback
-#       target is safe, and a successful return removes the ignored identity marker
-#       so the pool slice can be leased again. A failed return warns because the
-#       lease may still be held.
+#       target is safe, and a successful return removes the ignored identity and
+#       parent markers so the pool slice can be leased again. A failed return warns
+#       because the lease may still be held.
 #       Set FM_SECONDMATE_CHARTER='<charter>' to seed from inline charter text
 #       when no filled charter brief exists. Set FM_SECONDMATE_SCOPE='<scope>'
 #       to override the registry routing scope. Otherwise the registry summary
@@ -577,15 +577,36 @@ seed_rollback_target() {
   printf '%s\n' "$abs_target"
 }
 
+seed_restore_staged_marker() {
+  local staged=$1 path=$2 hold=$3 backup=$4
+  [ "$staged" -eq 1 ] || return 0
+  # The staged hold sits inside the worktree, so the return reset's git clean can
+  # delete it before the return reports failure; fall back to the pre-rollback
+  # copy in the seed backup directory when that happened.
+  if [ -f "$hold" ] || [ -L "$hold" ]; then
+    mv -f -- "$hold" "$path" 2>/dev/null && return 0
+  fi
+  if [ -f "$backup" ]; then
+    cp -- "$backup" "$path" 2>/dev/null && return 0
+  fi
+  echo "warning: failed to restore $path after treehouse return failed" >&2
+}
+
 seed_return_treehouse_home() {
-  local home=$1 abs_home marker marker_hold marker_staged=0
+  local home=$1 abs_home marker marker_hold parent_marker parent_hold marker_staged=0 parent_staged=0
   abs_home=$(seed_rollback_target "$home" "treehouse-acquired home") || return 0
   if ! command -v treehouse >/dev/null 2>&1; then
     echo "warning: failed to return treehouse-acquired home $abs_home during seed rollback; treehouse command not found" >&2
     return 0
   fi
+  # Known limitation: retirement through bin/fm-teardown.sh still leaves these
+  # ignored markers on the returned pool slice, so the first dash seed after a
+  # secondmate is retired still refuses once and the retry passes. The fix in
+  # that return path is tracked separately.
   marker="$abs_home/$SUB_HOME_MARKER"
+  parent_marker="$abs_home/$SUB_HOME_PARENT_MARKER"
   marker_hold="$marker.fm-seed-return.$$"
+  parent_hold="$parent_marker.fm-seed-return.$$"
   if [ -f "$marker" ] || [ -L "$marker" ]; then
     if ! mv -- "$marker" "$marker_hold" 2>/dev/null; then
       echo "warning: failed to return treehouse-acquired home $abs_home during seed rollback; could not stage its $SUB_HOME_MARKER marker for removal" >&2
@@ -593,16 +614,24 @@ seed_return_treehouse_home() {
     fi
     marker_staged=1
   fi
-  ( cd "$FM_ROOT" && treehouse return --force "$abs_home" >/dev/null ) || {
-    if [ "$marker_staged" -eq 1 ]; then
-      mv -f -- "$marker_hold" "$marker" 2>/dev/null || {
-        echo "warning: failed to restore $SUB_HOME_MARKER after treehouse return failed for $abs_home" >&2
-      }
+  if [ -f "$parent_marker" ] || [ -L "$parent_marker" ]; then
+    if ! mv -- "$parent_marker" "$parent_hold" 2>/dev/null; then
+      if [ "$marker_staged" -eq 1 ]; then
+        mv -f -- "$marker_hold" "$marker" 2>/dev/null || true
+      fi
+      echo "warning: failed to return treehouse-acquired home $abs_home during seed rollback; could not stage its $SUB_HOME_PARENT_MARKER marker for removal" >&2
+      return 0
     fi
+    parent_staged=1
+  fi
+  ( cd "$FM_ROOT" && treehouse return --force "$abs_home" >/dev/null ) || {
+    seed_restore_staged_marker "$marker_staged" "$marker" "$marker_hold" "$SEED_BACKUP_DIR/marker"
+    seed_restore_staged_marker "$parent_staged" "$parent_marker" "$parent_hold" "$SEED_BACKUP_DIR/parent-marker"
     echo "warning: failed to return treehouse-acquired home $abs_home during seed rollback; lease may still be held" >&2
     return 0
   }
   [ "$marker_staged" -eq 0 ] || rm -f -- "$marker_hold" 2>/dev/null || true
+  [ "$parent_staged" -eq 0 ] || rm -f -- "$parent_hold" 2>/dev/null || true
 }
 
 seed_remove_created_home() {

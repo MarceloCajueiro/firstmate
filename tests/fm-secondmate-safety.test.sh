@@ -325,20 +325,25 @@ test_home_seed_returns_treehouse_acquired_home_on_assignment_failure() {
 }
 
 test_home_seed_clears_orphan_marker_from_returned_treehouse_home() {
-  local home acquired fakebin log first_err second_err marker_after_return second_status=0
+  local home acquired retired_parent fakebin log first_err second_err
   home="$TMP_ROOT/dash-reuse-home"
   acquired="$TMP_ROOT/dash-reuse-acquired-home"
+  retired_parent="$TMP_ROOT/dash-reuse-retired-home"
   first_err="$TMP_ROOT/dash-reuse-first.err"
   second_err="$TMP_ROOT/dash-reuse-second.err"
-  mkdir -p "$home/projects" "$home/data" "$home/state"
+  mkdir -p "$home/projects" "$home/data" "$home/state" "$retired_parent"
   fm_git_init_commit "$home/projects/alpha"
   fm_git_add_origin "$home/projects/alpha" "$TMP_ROOT/remotes/dash-reuse-alpha.git"
   printf '%s\n' '- alpha [direct-PR] - alpha project (added 2026-06-22)' > "$home/data/projects.md"
   git clone --quiet "$ROOT" "$acquired"
   # The pool slice of a closed secondmate keeps its ignored content: the identity
-  # marker, data/ records, and cloned projects/ the treehouse return leaves behind.
+  # and parent markers, data/ records, and cloned projects/ the treehouse return
+  # leaves behind. The stale parent binding names a different firstmate home, the
+  # shape that blocks the next seed once the identity marker is gone.
   mkdir -p "$acquired/data/retired" "$acquired/state" "$acquired/config"
   printf 'retired\n' > "$acquired/.fm-secondmate-home"
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$retired_parent" \
+    > "$acquired/.fm-secondmate-parent"
   printf '%s\n' '- alpha [direct-PR] - alpha project (added 2026-06-22)' > "$acquired/data/projects.md"
   printf 'retired scope\n' > "$acquired/data/charter.md"
   mkdir -p "$acquired/projects"
@@ -351,46 +356,43 @@ test_home_seed_clears_orphan_marker_from_returned_treehouse_home() {
     FM_FAKE_TREEHOUSE_KEEP_HOME=1 FM_FAKE_TMUX_LOG="$log" \
     FM_SECONDMATE_CHARTER='replacement scope' FM_SECONDMATE_SCOPE='replacement scope' \
     "$ROOT/bin/fm-home-seed.sh" replacement - alpha >/dev/null 2>"$first_err"; then
-    fail "seed reused a returned pool slice while its retired marker was still present"
+    fail "seed reused a returned pool slice while its retired markers were still present"
   fi
   grep -F 'already marked for retired' "$first_err" >/dev/null \
     || fail "first seed did not reproduce the orphan-marker refusal"
-  marker_after_return=
-  if [ -f "$acquired/.fm-secondmate-home" ]; then
-    marker_after_return=$(cat "$acquired/.fm-secondmate-home")
-  fi
+  [ ! -e "$acquired/.fm-secondmate-home" ] \
+    || fail "rollback left the returned slice's identity marker behind"
+  [ ! -e "$acquired/.fm-secondmate-parent" ] \
+    || fail "rollback left the returned slice's stale parent binding behind"
 
-  if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TREEHOUSE_HOME="$acquired" \
+  PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TREEHOUSE_HOME="$acquired" \
     FM_FAKE_TREEHOUSE_KEEP_HOME=1 FM_FAKE_TMUX_LOG="$log" \
     FM_SECONDMATE_CHARTER='replacement scope' FM_SECONDMATE_SCOPE='replacement scope' \
-    "$ROOT/bin/fm-home-seed.sh" replacement - alpha >/dev/null 2>"$second_err"; then
-    second_status=0
-  else
-    second_status=$?
-  fi
-  if [ -n "$marker_after_return" ]; then
-    grep -F 'already marked for retired' "$second_err" >/dev/null \
-      || fail "returned pool slice kept marker '$marker_after_return', but the next seed failed for another reason"
-    fail "returned pool slice kept marker '$marker_after_return' and the next dash seed refused it again"
-  fi
-  [ "$second_status" -eq 0 ] || fail "next dash seed failed after the returned marker was cleared"
+    "$ROOT/bin/fm-home-seed.sh" replacement - alpha >/dev/null 2>"$second_err" \
+    || fail "next dash seed did not get past the stale parent binding: $(cat "$second_err")"
+  grep -F 'bound to parent' "$second_err" >/dev/null \
+    && fail "next dash seed still failed on a stale parent binding"
   [ "$(cat "$acquired/.fm-secondmate-home")" = replacement ] \
     || fail "next dash seed did not publish its own identity marker"
-  pass "home seed rollback clears a retired marker before a returned pool slice is reused"
+  pass "home seed rollback clears retired identity and parent markers before a returned pool slice is reused"
 }
 
 test_home_seed_warns_when_acquired_home_return_fails() {
-  local home acquired acquired_abs fakebin log err lease
+  local home acquired acquired_parent acquired_abs fakebin log err lease expected_parent
   home="$TMP_ROOT/dash-return-fail-home"
   acquired="$TMP_ROOT/dash-return-fail-acquired-home"
+  acquired_parent="$TMP_ROOT/dash-return-fail-parent-home"
   err="$TMP_ROOT/dash-return-fail.err"
-  mkdir -p "$home/projects" "$home/data" "$home/state"
+  mkdir -p "$home/projects" "$home/data" "$home/state" "$acquired_parent"
   fm_git_init_commit "$home/projects/alpha"
   fm_git_add_origin "$home/projects/alpha" "$TMP_ROOT/remotes/dash-return-fail-alpha.git"
   printf '%s\n' '- alpha [direct-PR] - alpha project (added 2026-06-22)' > "$home/data/projects.md"
   git clone --quiet "$ROOT" "$acquired"
   acquired_abs=$(cd "$acquired" && pwd -P)
   printf 'other\n' > "$acquired/.fm-secondmate-home"
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$acquired_parent" \
+    > "$acquired/.fm-secondmate-parent"
+  expected_parent=$(cat "$acquired/.fm-secondmate-parent")
   fakebin=$(make_fake_tmux "$TMP_ROOT/dash-return-fail-fake")
   log="$TMP_ROOT/dash-return-fail-fake/tmux.log"
   lease="$TMP_ROOT/dash-return-fail-fake/lease"
@@ -407,9 +409,48 @@ test_home_seed_warns_when_acquired_home_return_fails() {
   [ -f "$lease" ] || fail "failed rollback return did not preserve lease evidence"
   [ "$(cat "$acquired/.fm-secondmate-home")" = other ] \
     || fail "failed rollback return did not restore the acquired home's identity marker"
+  [ "$(cat "$acquired/.fm-secondmate-parent")" = "$expected_parent" ] \
+    || fail "failed rollback return did not restore the acquired home's parent marker"
   grep -F "treehouse return --force $acquired_abs" "$log" >/dev/null \
     || fail "failed rollback did not attempt to return the acquired home"
   pass "home seed rollback warns when treehouse-acquired return fails"
+}
+
+test_home_seed_restores_markers_after_reset_removes_staged_holds() {
+  local home acquired fakebin log err expected_home expected_parent
+  home="$TMP_ROOT/dash-reset-home"
+  acquired="$TMP_ROOT/dash-reset-acquired-home"
+  err="$TMP_ROOT/dash-reset.err"
+  mkdir -p "$home/projects" "$home/data" "$home/state"
+  fm_git_init_commit "$home/projects/alpha"
+  fm_git_add_origin "$home/projects/alpha" "$TMP_ROOT/remotes/dash-reset-alpha.git"
+  printf '%s\n' '- alpha [direct-PR] - alpha project (added 2026-06-22)' > "$home/data/projects.md"
+  git clone --quiet "$ROOT" "$acquired"
+  # The slice matches the requested id and parent, so seeding passes validation and
+  # reaches the marker backup before it fails; the return then resets the worktree,
+  # which deletes the staged holds and forces the restore to use those backups.
+  printf 'dash\n' > "$acquired/.fm-secondmate-home"
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$home" \
+    > "$acquired/.fm-secondmate-parent"
+  expected_home=$(cat "$acquired/.fm-secondmate-home")
+  expected_parent=$(cat "$acquired/.fm-secondmate-parent")
+  fakebin=$(make_fake_tmux "$TMP_ROOT/dash-reset-fake")
+  log="$TMP_ROOT/dash-reset-fake/tmux.log"
+
+  if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TREEHOUSE_HOME="$acquired" \
+    FM_FAKE_TREEHOUSE_RESET_HOME=1 FM_FAKE_TREEHOUSE_RETURN_FAIL=1 FM_FAKE_TMUX_LOG="$log" \
+    "$ROOT/bin/fm-home-seed.sh" dash - alpha >/dev/null 2>"$err"; then
+    fail "seed succeeded without a filled charter brief"
+  fi
+  grep -F 'no filled secondmate charter brief' "$err" >/dev/null \
+    || fail "seed did not fail on the missing charter brief"
+  grep -F 'warning: failed to return treehouse-acquired home' "$err" >/dev/null \
+    || fail "seed rollback did not warn when the treehouse return failed"
+  [ "$(cat "$acquired/.fm-secondmate-home")" = "$expected_home" ] \
+    || fail "failed rollback return did not restore the identity marker after the reset removed its staged hold"
+  [ "$(cat "$acquired/.fm-secondmate-parent")" = "$expected_parent" ] \
+    || fail "failed rollback return did not restore the parent marker after the reset removed its staged hold"
+  pass "home seed rollback restores staged markers from the backup after the return reset removes them"
 }
 
 test_home_seed_does_not_return_unsafe_acquired_home() {
@@ -3024,6 +3065,7 @@ test_home_seed_uses_treehouse_acquired_home
 test_home_seed_returns_treehouse_acquired_home_on_assignment_failure
 test_home_seed_clears_orphan_marker_from_returned_treehouse_home
 test_home_seed_warns_when_acquired_home_return_fails
+test_home_seed_restores_markers_after_reset_removes_staged_holds
 test_home_seed_does_not_return_unsafe_acquired_home
 test_home_seed_rolls_back_failed_clone
 test_home_seed_refuses_missing_filled_charter
