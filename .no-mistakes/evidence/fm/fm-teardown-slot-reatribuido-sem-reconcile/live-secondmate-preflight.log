@@ -1,0 +1,59 @@
+==============================================================
+LIVE DRIVE: forced secondmate preflight vs descendant detach marker
+post-fix = /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP  (cd16960)
+pre-fix  = /var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T//fm-prefix-check.7lHqiT (e39a997, round-1 reconcile without the move)
+real git worktrees + real treehouse + real tmux (isolated socket)
+==============================================================
+
+Created /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-post/repo/treehouse.toml
+POST-FIX case: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-post
+1. reconcile descendant p-child (FM_HOME=<mate home>)
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-post/mate /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-post/th-pool reconcile-reassigned-slot p-child
+reconciled reassigned Treehouse slot for p-child (slot /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-post/th-pool/.treehouse/repo-e36921/1/repo left to p-owner)
+### rc=0
+
+2. forced teardown of secondmate parent p-parent (FM_HOME=<home>)
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-post/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-post/th-pool p-parent --force
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  2 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP/.pi/extensions/fm-primary-turnend-guard.ts -e /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+teardown p-parent complete (window firstmate:fm-p-parent, worktree /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-post/mate)
+### rc=0
+
+parent meta removed? yes
+descendant meta removed? yes
+claimant record retained? yes
+claimant slot claim retained? task=p-owner
+slot still leased? 
+1     leased       /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-post/th-pool/.treehouse/repo-e36921/1/repo  (held by p-child)
+
+Created /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-pre/repo/treehouse.toml
+PRE-FIX case: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-pre
+1. reconcile descendant q-child with the PRE-FIX binary
+### DRVP /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-pre/mate /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-pre/th-pool reconcile-reassigned-slot q-child
+reconciled reassigned Treehouse slot for q-child (slot /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-pre/th-pool/.treehouse/repo-b62e36/1/repo left to q-owner)
+### rc=0
+
+2. forced teardown of secondmate parent q-parent with the PRE-FIX binary
+### DRVP /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-pre/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-pre/th-pool q-parent --force
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  2 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP/.pi/extensions/fm-primary-turnend-guard.ts -e /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: task q-child's recorded worktree /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-pre/th-pool/.treehouse/repo-b62e36/1/repo is also task q-owner's recorded worktree.
+Returning that pool slot would kill q-owner's processes and reset its copy, so nothing was changed - not even with --force.
+Inspect both records (bin/fm-crew-state.sh q-child; bin/fm-crew-state.sh q-owner). If the slot claim proves one was reassigned, run bin/fm-teardown.sh reconcile-reassigned-slot <stale-task-id>, then re-run teardown.
+### rc=1
+
+parent meta removed? no
+
+RESULT: pre-fix refuses the parent teardown (rc=1, 'is also task q-owner'),
+post-fix completes it (rc=0). The round-2 move of the self-marker check is
+what makes preflight_descendant_treehouse_slots honor a reconciled descendant.

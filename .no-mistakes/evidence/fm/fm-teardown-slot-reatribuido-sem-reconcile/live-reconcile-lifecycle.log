@@ -1,0 +1,85 @@
+==============================================================
+LIVE DRIVE: reconcile-reassigned-slot end-to-end lifecycle
+real bin/fm-teardown.sh | real git worktrees | real treehouse vv2.3.0
+real tmux (isolated TMUX_TMPDIR=/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T//fm-labsock.01xITR, no live session touched)
+date: 2026-09-21T16:34:09Z
+==============================================================
+
+Created /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/repo/treehouse.toml
+case: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle
+leased pool slot: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo
+claim: task=ev-owner home=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home 
+
+--- real treehouse status before any teardown ---
+1     leased       /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo  (held by ev-stale)
+
+STEP 1. stale task teardown BEFORE reconcile -> must refuse
+### env FM_HOME=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home FM_ROOT_OVERRIDE=/Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP TMUX_TMPDIR=/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T//fm-labsock.01xITR TREEHOUSE_ROOT=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP/bin/fm-teardown.sh ev-stale
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  2 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP/.pi/extensions/fm-primary-turnend-guard.ts -e /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: task ev-stale's recorded worktree /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo is also task ev-owner's recorded worktree.
+Returning that pool slot would kill ev-owner's processes and reset its copy, so nothing was changed - not even with --force.
+Inspect both records (bin/fm-crew-state.sh ev-stale; bin/fm-crew-state.sh ev-owner). If the slot claim proves one was reassigned, run bin/fm-teardown.sh reconcile-reassigned-slot <stale-task-id>, then re-run teardown.
+### rc=1
+
+stale meta still present? yes
+
+STEP 2. claimant task teardown BEFORE reconcile -> must refuse too
+### env FM_HOME=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home FM_ROOT_OVERRIDE=/Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP TMUX_TMPDIR=/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T//fm-labsock.01xITR TREEHOUSE_ROOT=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP/bin/fm-teardown.sh ev-owner --force
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+REFUSED: task ev-owner's recorded worktree /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo is also task ev-stale's recorded worktree.
+Returning that pool slot would kill ev-stale's processes and reset its copy, so nothing was changed - not even with --force.
+Inspect both records (bin/fm-crew-state.sh ev-owner; bin/fm-crew-state.sh ev-stale). If the slot claim proves one was reassigned, run bin/fm-teardown.sh reconcile-reassigned-slot <stale-task-id>, then re-run teardown.
+### rc=1
+
+owner meta still present? yes
+
+STEP 3. sanctioned reconcile of the stale record
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool reconcile-reassigned-slot ev-stale
+reconciled reassigned Treehouse slot for ev-stale (slot /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo left to ev-owner)
+### rc=0
+
+--- stale record marker ---
+treehouse_slot_reassigned_path=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo
+treehouse_slot_reassigned_to=ev-owner
+--- slot claim unchanged after reconcile ---
+task=ev-owner
+home=/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home
+--- real treehouse status unchanged after reconcile (still leased) ---
+1     leased       /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo  (held by ev-stale)
+
+STEP 4. stale teardown WITHOUT --force (captain granted no discard authority)
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool ev-stale
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/repo: skipped: no origin remote
+teardown ev-stale complete (window firstmate:fm-ev-stale; pool slot /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo left to task ev-owner, which it was reassigned to)
+Backlog: ev-stale just finished (this home keeps no markdown backlog at /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home/data/backlog.md). Update /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home/data/backlog.md - move ev-stale to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+### rc=0
+
+stale meta removed? yes
+claimant meta retained? yes
+claimant uncommitted work intact? uncommitted work belonging to the claimant
+claim still naming claimant? task=ev-owner
+slot still leased (no treehouse return)?
+1     leased       /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo  (held by ev-stale)
+
+STEP 5. claimant teardown --force returns the slot to the pool
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool ev-owner --force
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+🌳 Worktree returned to pool.
+/private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/repo: skipped: no origin remote
+teardown ev-owner complete (window firstmate:fm-ev-owner, worktree /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo)
+Backlog: ev-owner just finished (this home keeps no markdown backlog at /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home/data/backlog.md). Update /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/home/data/backlog.md - move ev-owner to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+### rc=0
+
+owner meta removed? yes
+slot claim released? yes
+--- real treehouse status after return ---
+1     available    /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-lifecycle/th-pool/.treehouse/repo-5e41fd/1/repo
+

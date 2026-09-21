@@ -1,0 +1,10 @@
+not ok - forced secondmate teardown refused a descendant already detached by reconcile: ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  2 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-prefix-check.7lHqiT/.pi/extensions/fm-primary-turnend-guard.ts -e /var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-prefix-check.7lHqiT/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: task preflight-child's recorded worktree /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-teardown-endpoint-safety.5QeUL0/secondmate-preflight-reassigned/pool/1/project is also task preflight-owner's recorded worktree.
+Returning that pool slot would kill preflight-owner's processes and reset its copy, so nothing was changed - not even with --force.
+Inspect both records (bin/fm-crew-state.sh preflight-child; bin/fm-crew-state.sh preflight-owner). If the slot claim proves one was reassigned, run bin/fm-teardown.sh reconcile-reassigned-slot <stale-task-id>, then re-run teardown.

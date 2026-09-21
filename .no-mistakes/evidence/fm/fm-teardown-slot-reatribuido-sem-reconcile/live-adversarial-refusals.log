@@ -1,0 +1,74 @@
+==============================================================
+LIVE DRIVE: adversarial refusals leave the record byte-identical
+real bin/fm-teardown.sh | real treehouse slot | real tmux
+==============================================================
+
+Created /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-nonterm/repo/treehouse.toml
+CASE A: no terminal status declaration
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-nonterm/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-nonterm/th-pool reconcile-reassigned-slot rn-stale
+REFUSED: task rn-stale has no terminal done or failed status declaration; nothing was changed
+### rc=1
+
+record byte-identical: yes
+
+Created /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-live/repo/treehouse.toml
+CASE B: endpoint still runs an agent (real tmux pane)
+fm-rl-stale zsh
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-live/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-live/th-pool reconcile-reassigned-slot rl-stale
+REFUSED: task rl-stale's recorded endpoint reads 'alive', not confidently dead or agent-less; nothing was changed
+### rc=1
+
+record byte-identical: yes
+
+Created /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-ambig/repo/treehouse.toml
+CASE C: claim names a task with no reachable record (ambiguous ownership)
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-ambig/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-ambig/th-pool reconcile-reassigned-slot ra-stale
+REFUSED: slot claim task ghost-owner has 0 reachable task records naming /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-ambig/th-pool/.treehouse/repo-69de69/1/repo; ownership is ambiguous and nothing was changed
+### rc=1
+
+record byte-identical: yes
+
+Created /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-mine/repo/treehouse.toml
+CASE D: claim still names the stale record itself (no reassignment proved)
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-mine/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-mine/th-pool reconcile-reassigned-slot rm-stale
+REFUSED: task rm-stale still owns the slot claim at /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-mine/th-pool/.treehouse/repo-09fc8e/1/repo; nothing was changed
+### rc=1
+
+record byte-identical: yes
+
+Created /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-partial/repo/treehouse.toml
+CASE E: partial detach marker (path without claimant) is fail-closed
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-partial/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-partial/th-pool reconcile-reassigned-slot rp-stale
+REFUSED: task rp-stale has incomplete or contradictory reassigned-slot metadata in /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-partial/home/state/rp-stale.meta; nothing was changed
+Repair the task record from trusted evidence, then retry teardown or reconcile-reassigned-slot.
+### rc=1
+
+record byte-identical: yes
+### DRV /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-partial/home /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-partial/th-pool rp-stale
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  2 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP/.pi/extensions/fm-primary-turnend-guard.ts -e /Users/marcelo/.no-mistakes/worktrees/64a66f572b15/01M329HQC1PXFK2YB25Z8V9HWP/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: task rp-stale has incomplete or contradictory reassigned-slot metadata in /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-ref-partial/home/state/rp-stale.meta; nothing was changed
+Repair the task record from trusted evidence, then retry teardown or reconcile-reassigned-slot.
+### rc=1
+
+stale record still present after teardown refusal? yes
+
+==============================================================
+CASE F: forced secondmate preflight refuses a descendant whose
+detach marker path no longer matches its current canonical slot
+==============================================================
+descendant record: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-contradict/mate/state/c-child.meta
+marker path:       /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-contradict/other-directory (mismatch)
+REFUSED: task c-child has incomplete or contradictory reassigned-slot metadata in /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-contradict/mate/state/c-child.meta; nothing was changed
+Repair the task record from trusted evidence, then retry teardown or reconcile-reassigned-slot.
+parent teardown rc=1
+parent record still present? yes
+descendant record still present? yes
+claim untouched? task=c-owner
+slot still leased?
+1     leased       /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-live-drive.Ysn1KY/ev-sm-contradict/th-pool/.treehouse/repo-588e79/1/repo  (held by c-child)
