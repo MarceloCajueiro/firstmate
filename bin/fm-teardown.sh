@@ -151,6 +151,14 @@
 # landed-work test, which is what lets it finish without --force: the re-lent
 # slot's contents are the claimant's work, so this task neither proves nor
 # discards anything there.
+# KNOWN LIMITATION: the marker has no lifecycle other than teardown, so
+# relaunching an already-reconciled task (bin/fm-spawn.sh --relaunch, reachable as
+# bin/fm-control.sh <id> relaunch) reuses the recorded worktree as-is and
+# preserve_relaunch_meta re-emits both marker fields. A later teardown of that
+# task then treats the slot as reassigned, exits 0, and reports the slot as left
+# to the claimant WITHOUT returning it to the pool or releasing the claim.
+# Resolving this is a spawn-side lifecycle decision tracked as separate work and
+# deliberately out of scope here.
 # Orca is not a pool slot and proves its path through
 # require_orca_worktree_path_match instead.
 # Orca tasks use the same safety checks, then close the recorded terminal and
@@ -2412,6 +2420,12 @@ require_exclusive_worktree_slot_record() {
   local record_meta=$1 record_id=$2 record_state=$3 worktree=$4
   local slot state_dir other other_id field other_path other_slot marker_state
   slot=$(canonical_existing_dir "$worktree") || return 0
+  teardown_reassigned_record_state "$record_meta" "$slot" && marker_state=0 || marker_state=$?
+  case "$marker_state" in
+    0) return 0 ;;
+    1) ;;
+    *) teardown_reassigned_record_refusal "$record_id" "$record_meta"; return 1 ;;
+  esac
   collect_local_firstmate_states "$record_state" || return 1
   for state_dir in "${TREEHOUSE_OWNER_STATES[@]}"; do
     for other in "$state_dir"/*.meta; do
@@ -2439,14 +2453,8 @@ require_exclusive_worktree_slot_record() {
 }
 
 require_exclusive_task_worktree_slot() {
-  local slot marker_state
+  local slot
   slot=$(teardown_live_slot_path) || return 0
-  teardown_reassigned_record_state "$META" "$slot" && marker_state=0 || marker_state=$?
-  case "$marker_state" in
-    0) return 0 ;;
-    1) ;;
-    *) teardown_reassigned_record_refusal "$ID" "$META"; return 1 ;;
-  esac
   require_exclusive_worktree_slot_record "$META" "$ID" "$STATE" "$slot"
 }
 

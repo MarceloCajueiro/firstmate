@@ -742,6 +742,106 @@ test_reconciled_record_tears_down_without_force_and_spares_claimant_work() {
   pass "fm-teardown: a reconciled record tears down without --force while the claimant's slot work is untouched"
 }
 
+# Forced secondmate teardown enumerates its descendants' Treehouse slots through
+# the same exclusivity scan a record's own teardown uses. A descendant the
+# reconcile verb already detached from a reassigned slot must not be vetoed by
+# the claimant record that now names that slot, or the parent home could never
+# be cleaned.
+test_forced_secondmate_preflight_honors_descendant_reassigned_slot() {
+  local dir mate parent=preflight-mate stale=preflight-child owner=preflight-owner rc
+
+  dir=$(make_case secondmate-preflight-reassigned)
+  mark_case_as_treehouse_pool "$dir"
+  mate="$dir/mate"
+  mkdir -p "$mate/state" "$mate/data" "$mate/config" "$mate/projects"
+  printf '%s\n' "$parent" > "$mate/.fm-secondmate-home"
+  write_local_parent_record "$mate" "$dir/home"
+
+  fm_write_meta "$dir/home/state/$parent.meta" \
+    "window=firstmate:fm-$parent" "endpoint_task_id=$parent" \
+    "worktree=$mate" "project=$mate" "home=$mate" \
+    "kind=secondmate" "mode=secondmate" "harness=echo" "yolo=off" "projects=alpha"
+
+  fm_write_meta "$mate/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=ship"
+  printf 'done [at=1]: terminal fixture\n' > "$mate/state/$stale.status"
+
+  fm_write_meta "$dir/home/state/$owner.meta" \
+    "window=firstmate:fm-$owner" "endpoint_task_id=$owner" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=ship"
+  printf 'done [at=2]: terminal fixture\n' > "$dir/home/state/$owner.status"
+  claim_pool_slot "$dir" "$owner"
+
+  FM_HOME="$mate" FM_ROOT_OVERRIDE="$ROOT" FM_RUNTIME_LOG="$dir/runtime.log" \
+    PATH="$dir/fakebin:$PATH" "$TEARDOWN" reconcile-reassigned-slot "$stale" \
+    > "$dir/reconcile.out" 2> "$dir/reconcile.err" \
+    || fail "the sanctioned reconcile verb failed: $(cat "$dir/reconcile.err")"
+  assert_contains "$(cat "$mate/state/$stale.meta")" "treehouse_slot_reassigned_to=$owner" \
+    "reconcile did not record the descendant's detach marker"
+
+  : > "$dir/runtime.log"
+  set +e
+  run_case "$dir" "$parent" > "$dir/parent.out" 2> "$dir/parent.err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] \
+    || fail "forced secondmate teardown refused a descendant already detached by reconcile: $(cat "$dir/parent.err")"
+  assert_no_grep "is also task $owner" "$dir/parent.err" \
+    "the descendant's own detach marker did not spare it the exclusivity refusal"
+  assert_absent "$dir/home/state/$parent.meta" "forced teardown retained the secondmate parent record"
+  assert_absent "$mate/state/$stale.meta" "forced teardown retained the reconciled descendant record"
+  assert_present "$dir/home/state/$owner.meta" "forced teardown removed the unrelated claimant record"
+  ! grep -Fq "treehouse <return>" "$dir/runtime.log" \
+    || fail "forced teardown returned the claimant's reassigned slot: $(cat "$dir/runtime.log")"
+
+  pass "fm-teardown: forced secondmate preflight honors a descendant already detached from a reassigned slot"
+}
+
+test_forced_secondmate_preflight_refuses_a_descendant_contradictory_marker() {
+  local dir mate parent=contradict-mate stale=contradict-child owner=contradict-owner rc
+
+  dir=$(make_case secondmate-preflight-contradictory)
+  mark_case_as_treehouse_pool "$dir"
+  mkdir -p "$dir/other-directory"
+  mate="$dir/mate"
+  mkdir -p "$mate/state" "$mate/data" "$mate/config" "$mate/projects"
+  printf '%s\n' "$parent" > "$mate/.fm-secondmate-home"
+
+  fm_write_meta "$dir/home/state/$parent.meta" \
+    "window=firstmate:fm-$parent" "endpoint_task_id=$parent" \
+    "worktree=$mate" "project=$mate" "home=$mate" \
+    "kind=secondmate" "mode=secondmate" "harness=echo" "yolo=off" "projects=alpha"
+
+  # The marker's path no longer matches the record's current canonical slot.
+  fm_write_meta "$mate/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=ship" \
+    "treehouse_slot_reassigned_path=$dir/other-directory" \
+    "treehouse_slot_reassigned_to=$owner"
+
+  fm_write_meta "$dir/home/state/$owner.meta" \
+    "window=firstmate:fm-$owner" "endpoint_task_id=$owner" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=ship"
+  claim_pool_slot "$dir" "$owner"
+
+  set +e
+  run_case "$dir" "$parent" > "$dir/parent.out" 2> "$dir/parent.err"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] \
+    || fail "forced secondmate teardown proceeded past a contradictory descendant detach marker"
+  assert_grep "incomplete or contradictory reassigned-slot metadata" "$dir/parent.err" \
+    "the contradictory marker refusal did not explain itself"
+  assert_present "$mate/state/$stale.meta" "the contradictory-marker refusal removed the descendant record"
+  assert_present "$dir/home/state/$parent.meta" "the contradictory-marker refusal removed the parent record"
+  assert_present "$dir/worktree/sentinel" "the contradictory-marker refusal reset the shared slot"
+  [ ! -s "$dir/runtime.log" ] \
+    || fail "the contradictory-marker refusal reached the runtime: $(cat "$dir/runtime.log")"
+
+  pass "fm-teardown: forced secondmate preflight still refuses a descendant with a contradictory detach marker"
+}
+
 test_cross_home_pool_slot_collision_refuses() {
   local dir id=stale-task other=secondmate-task second_home second_project rc
   dir=$(make_case slot-reuse-cross-home)
@@ -1595,6 +1695,8 @@ test_reused_pool_slot_refuses_before_touching_the_other_task
 test_reassigned_terminal_slot_records_can_be_reconciled_before_teardown
 test_reassigned_slot_reconcile_refuses_nonterminal_live_and_ambiguous_records
 test_reconciled_record_tears_down_without_force_and_spares_claimant_work
+test_forced_secondmate_preflight_honors_descendant_reassigned_slot
+test_forced_secondmate_preflight_refuses_a_descendant_contradictory_marker
 test_cross_home_pool_slot_collision_refuses
 test_sole_slot_record_still_tears_down
 test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot
