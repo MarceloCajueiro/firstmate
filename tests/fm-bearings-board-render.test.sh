@@ -127,13 +127,15 @@ test_every_call_card_type_links_its_pr_and_issue() {
     {"key":"sample-decision","type":"decision","repo":"sample","title":"Decision with both",
      "about":"a choice","decide":"pick one",
      "pr_url":"https://github.com/example/sample/pull/12",
+     "ref_pr_url":"https://github.com/example/other/pull/90",
      "issue_url":"https://github.com/example/tracker/issues/34",
      "options":[{"value":"yes","label":"Yes"}]},
     {"key":"merge.sample-task","type":"merge","repo":"sample","title":"Merge with both","risk":"low",
      "pr_url":"https://github.com/example/sample/pull/56",
      "issue_url":"https://gitlab.com/group/sub/repo/-/issues/78",
      "options":[{"value":"merge","label":"Merge now"}]},
-    {"key":"sample-credential","type":"credential","repo":"sample","title":"Credential with issue only",
+    {"key":"sample-credential","type":"credential","repo":"sample","title":"Credential with related PR and issue",
+     "ref_pr_url":"https://github.com/example/sample/pull/91",
      "issue_url":"https://linear.app/example/issue/ENG-9",
      "options":[{"value":"done","label":"Provided"}]},
     {"key":"sample-bare","type":"decision","repo":"sample","title":"Decision with neither",
@@ -146,14 +148,17 @@ test_every_call_card_type_links_its_pr_and_issue() {
       and (.calls[0].refs == [
         {kind:"PR", label:"example/sample#12", href:"https://github.com/example/sample/pull/12",
          target:"_blank", rel:"noopener"},
+        {kind:"related PR", label:"example/other#90", href:"https://github.com/example/other/pull/90",
+         target:"_blank", rel:"noopener"},
         {kind:"issue", label:"example/tracker#34", href:"https://github.com/example/tracker/issues/34",
          target:"_blank", rel:"noopener"}])
       and ([.calls[1].refs[] | [.kind, .label]]
         == [["PR", "example/sample#56"], ["issue", "group/sub/repo#78"]])
       and ([.calls[2].refs[] | [.kind, .label, .href]]
-        == [["issue", "https://linear.app/example/issue/ENG-9", "https://linear.app/example/issue/ENG-9"]])
+        == [["related PR", "example/sample#91", "https://github.com/example/sample/pull/91"],
+            ["issue", "https://linear.app/example/issue/ENG-9", "https://linear.app/example/issue/ENG-9"]])
       and (.calls[3].refs == [])
-  ' >/dev/null || fail "a Captain's Call card did not link its PR and issue: $out"
+  ' >/dev/null || fail "a Captain's Call card did not link its PRs and issue: $out"
   pass "every Captain's Call card type links its PR and issue with short labels in a new tab"
 }
 

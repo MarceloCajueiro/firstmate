@@ -533,6 +533,7 @@ __FM_BEARINGS_BOARD_DATA__
     /* every card type links its PR and issue so the captain can open either */
     var refs = el("div", "bb-refs");
     if (item.pr_url) refs.appendChild(refLink("PR", item.pr_url));
+    if (item.ref_pr_url) refs.appendChild(refLink("related PR", item.ref_pr_url));
     if (item.issue_url) refs.appendChild(refLink("issue", item.issue_url));
     if (refs.children.length) pad.appendChild(refs);
 

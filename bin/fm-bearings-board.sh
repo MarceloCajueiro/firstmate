@@ -79,9 +79,12 @@
 # first; a row with no comparable date keeps its payload order after every dated
 # row. Anything else in that field refuses rather than sorting on garbage.
 #
-# Every Captain's Call item MAY carry `pr_url` and `issue_url`, each an https
-# URL for the PR and the issue or card its subject concerns; the template links
-# both on every card type. Any other value in either field refuses.
+# Every Captain's Call item MAY carry `pr_url`, `ref_pr_url` and `issue_url`,
+# each an https URL. `pr_url` is the PR the hold waits on, and a landed row with
+# the same `pr_url` drops a decision card; `ref_pr_url` is a related PR the card
+# does not wait on and never drops a card; `issue_url` is the issue or card its
+# subject concerns. The template links all three on every card type. Any other
+# value in any of these fields refuses.
 #
 # The board path is stable - $FM_HOME/.lavish/bearings-board.html - so a
 # re-invocation rebuilds the same file in place, which keeps the same Lavish
@@ -162,6 +165,7 @@ validate_payload() {  # <data.json>
       and (optional_string("decide"))
       and (optional_string("detail"))
       and (optional_https_url("pr_url"))
+      and (optional_https_url("ref_pr_url"))
       and (optional_https_url("issue_url"))
       and optional_subject
       and (if has("subject") then .type == "decision" else true end)
