@@ -1,0 +1,13 @@
+### mutation: .captains_call[0].ref_pr_url="http://github.com/x/y/pull/9"
+fm-bearings-board: board data does not satisfy fm-bearings-board.v1: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-lab.yngiiT/bad.json
+rc=1
+### mutation: .captains_call[0].issue_url="javascript:alert(1)"
+fm-bearings-board: board data does not satisfy fm-bearings-board.v1: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-lab.yngiiT/bad.json
+rc=1
+### mutation: .captains_call[1].issue_url=34
+fm-bearings-board: board data does not satisfy fm-bearings-board.v1: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-lab.yngiiT/bad.json
+rc=1
+### mutation: .captains_call[2].ref_pr_url=""
+fm-bearings-board: board data does not satisfy fm-bearings-board.v1: /private/var/folders/p5/wt3b3h217cs501qk4scpjql80000gn/T/fm-lab.yngiiT/bad.json
+rc=1
+board unchanged: yes
