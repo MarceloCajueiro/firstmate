@@ -94,12 +94,12 @@ require_listener_reached_poll() {  # <home>
 
 # Build the board from <underway-json> plus <charted-json> and return what the
 # renderer produced.
-render_board() {  # <home> <underway-json> <charted-json> [charted_more] [charted_warning_more]
-  local home=$1 underway=$2 charted=$3 more=${4:-0} warning_more=${5:-0} data="$1/payload.json"
+render_board() {  # <home> <underway-json> <charted-json> [charted_more] [charted_warning_more] [captains_call-json]
+  local home=$1 underway=$2 charted=$3 more=${4:-0} warning_more=${5:-0} calls=${6:-'[]'} data="$1/payload.json"
   jq -n --argjson underway "$underway" --argjson charted "$charted" \
-    --argjson more "$more" --argjson warning_more "$warning_more" '{
+    --argjson more "$more" --argjson warning_more "$warning_more" --argjson calls "$calls" '{
     schema:"fm-bearings-board.v1", home:"render-home", generated:"2026-08-26T00:00Z",
-    prs_live:false, captains_call:[], underway:$underway, landed:[],
+    prs_live:false, captains_call:$calls, underway:$underway, landed:[],
     charted:$charted, charted_more:$more, charted_warning_more:$warning_more}' > "$data"
   PATH="$home/fakebin:$PATH" FM_HOME="$home" \
     FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
@@ -118,6 +118,43 @@ render() {  # <home> <charted-json> [charted_more] [charted_warning_more]
 
 charted_next_count() {  # <render-json>
   printf '%s' "$1" | jq -r '.stats[] | select(.label == "charted next") | .n'
+}
+
+test_every_call_card_type_links_its_pr_and_issue() {
+  local home out
+  home=$(make_home call-links)
+  out=$(render_board "$home" '[]' '[]' 0 0 '[
+    {"key":"sample-decision","type":"decision","repo":"sample","title":"Decision with both",
+     "about":"a choice","decide":"pick one",
+     "pr_url":"https://github.com/example/sample/pull/12",
+     "issue_url":"https://github.com/example/tracker/issues/34",
+     "options":[{"value":"yes","label":"Yes"}]},
+    {"key":"merge.sample-task","type":"merge","repo":"sample","title":"Merge with both","risk":"low",
+     "pr_url":"https://github.com/example/sample/pull/56",
+     "issue_url":"https://gitlab.com/group/sub/repo/-/issues/78",
+     "options":[{"value":"merge","label":"Merge now"}]},
+    {"key":"sample-credential","type":"credential","repo":"sample","title":"Credential with issue only",
+     "issue_url":"https://linear.app/example/issue/ENG-9",
+     "options":[{"value":"done","label":"Provided"}]},
+    {"key":"sample-bare","type":"decision","repo":"sample","title":"Decision with neither",
+     "options":[{"value":"yes","label":"Yes"}]}
+  ]')
+  printf '%s' "$out" | jq -e '.error == ""' >/dev/null \
+    || fail "the board rendered its fail-closed error instead of the fleet: $out"
+  printf '%s' "$out" | jq -e '
+    (.calls | length) == 4
+      and (.calls[0].refs == [
+        {kind:"PR", label:"example/sample#12", href:"https://github.com/example/sample/pull/12",
+         target:"_blank", rel:"noopener"},
+        {kind:"issue", label:"example/tracker#34", href:"https://github.com/example/tracker/issues/34",
+         target:"_blank", rel:"noopener"}])
+      and ([.calls[1].refs[] | [.kind, .label]]
+        == [["PR", "example/sample#56"], ["issue", "group/sub/repo#78"]])
+      and ([.calls[2].refs[] | [.kind, .label, .href]]
+        == [["issue", "https://linear.app/example/issue/ENG-9", "https://linear.app/example/issue/ENG-9"]])
+      and (.calls[3].refs == [])
+  ' >/dev/null || fail "a Captain's Call card did not link its PR and issue: $out"
+  pass "every Captain's Call card type links its PR and issue with short labels in a new tab"
 }
 
 test_a_warning_row_reads_as_a_repair_not_as_queued_work() {
@@ -266,6 +303,7 @@ test_charted_rows_without_a_filed_date_follow_the_dated_rows_in_payload_order() 
   pass "charted rows with no filed date follow the dated rows in payload order"
 }
 
+test_every_call_card_type_links_its_pr_and_issue
 test_an_underway_row_leads_with_the_task_name_and_keeps_its_run_status
 test_an_underway_identifier_label_is_not_replaced_by_run_status
 test_charted_next_reads_newest_filed_first

@@ -149,6 +149,8 @@ write_valid_payload() {  # <path>
       "title": "Perishable-first admission",
       "about": "A payload string that tries to break out: </script><b>x</b>",
       "decide": "Adopt it?",
+      "pr_url": "https://github.com/example/sample/pull/2",
+      "issue_url": "https://github.com/example/sample/issues/3",
       "options": [
         { "value": "yes", "label": "Adopt", "hint": "recommended" },
         { "value": "no", "label": "Keep current" }
@@ -293,6 +295,16 @@ test_build_refuses_malformed_payloads_before_touching_the_board() {
   jq '.captains_call[1].pr_url = "javascript:alert(1)"' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
   set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
   [ "$rc" -ne 0 ] || fail "a non-HTTPS Captain’s Call PR URL was accepted"
+
+  write_valid_payload "$data"
+  jq '.captains_call[0].issue_url = "javascript:alert(1)"' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+  set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+  [ "$rc" -ne 0 ] || fail "a non-HTTPS Captain’s Call issue URL was accepted"
+
+  write_valid_payload "$data"
+  jq '.captains_call[1].issue_url = 34' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+  set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+  [ "$rc" -ne 0 ] || fail "a non-string Captain’s Call issue URL was accepted"
 
   write_valid_payload "$data"
   jq '.landed = [{
