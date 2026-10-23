@@ -149,6 +149,8 @@ write_valid_payload() {  # <path>
       "title": "Perishable-first admission",
       "about": "A payload string that tries to break out: </script><b>x</b>",
       "decide": "Adopt it?",
+      "pr_url": "https://github.com/example/sample/pull/2",
+      "issue_url": "https://github.com/example/sample/issues/3",
       "options": [
         { "value": "yes", "label": "Adopt", "hint": "recommended" },
         { "value": "no", "label": "Keep current" }
@@ -293,6 +295,21 @@ test_build_refuses_malformed_payloads_before_touching_the_board() {
   jq '.captains_call[1].pr_url = "javascript:alert(1)"' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
   set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
   [ "$rc" -ne 0 ] || fail "a non-HTTPS Captain’s Call PR URL was accepted"
+
+  write_valid_payload "$data"
+  jq '.captains_call[0].issue_url = "javascript:alert(1)"' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+  set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+  [ "$rc" -ne 0 ] || fail "a non-HTTPS Captain’s Call issue URL was accepted"
+
+  write_valid_payload "$data"
+  jq '.captains_call[0].ref_pr_url = "http://github.com/example/sample/pull/9"' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+  set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+  [ "$rc" -ne 0 ] || fail "a non-HTTPS Captain’s Call related PR URL was accepted"
+
+  write_valid_payload "$data"
+  jq '.captains_call[1].issue_url = 34' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+  set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+  [ "$rc" -ne 0 ] || fail "a non-string Captain’s Call issue URL was accepted"
 
   write_valid_payload "$data"
   jq '.landed = [{
@@ -636,7 +653,10 @@ test_build_drops_decision_cards_whose_subject_already_landed() {
          "options":[{"value":"yes","label":"Yes"}]},
         {"key":"still-open","type":"decision","repo":"sample","title":"Genuinely open",
          "subject":{"artifact":"quota-axi","version":"0.2.0"},
-         "options":[{"value":"yes","label":"Yes"}]}
+         "options":[{"value":"yes","label":"Yes"}]},
+        {"key":"revert-or-hotfix","type":"decision","repo":"sample","title":"Merged PR broke staging",
+         "ref_pr_url":"https://github.com/sample/sample/pull/7",
+         "options":[{"value":"revert","label":"Revert"}]}
       ]
       | .landed = [
         {"id":"landed-by-task","repo":"sample","what":"shipped it","owner":"crew"},
@@ -654,9 +674,11 @@ test_build_drops_decision_cards_whose_subject_already_landed() {
     "the build did not report dropping the merged timeout/reattach card: $out"
   assert_contains "$out" "dropped-landed-card: quota-version" \
     "the build did not report dropping the superseded quota-axi version card: $out"
-  extract_payload "$board" | jq -e '[.captains_call[].key] == ["still-open"]' >/dev/null \
+  assert_not_contains "$out" "dropped-landed-card: revert-or-hotfix" \
+    "the build dropped a card whose related PR landed but which does not wait on it: $out"
+  extract_payload "$board" | jq -e '[.captains_call[].key] == ["still-open", "revert-or-hotfix"]' >/dev/null \
     || fail "the board dropped an open card or kept one whose subject already landed"
-  pass "build drops decision cards whose subject already landed and keeps open ones"
+  pass "build drops decision cards whose subject already landed and keeps open ones, even when a related PR landed"
 }
 
 test_build_keeps_a_decision_absent_from_the_main_backlog() {
